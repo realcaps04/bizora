@@ -150,6 +150,7 @@ export async function registerCompany(input: {
       font_size: 'medium',
       theme: 'light',
       backup_schedule: 'daily',
+      google_drive_backup: 'false',
       terms: 'Thank you for your business.',
     }
     for (const [key, value] of Object.entries(defaults)) {

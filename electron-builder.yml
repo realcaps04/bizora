@@ -15,6 +15,10 @@ files:
   - dist-electron/**/*
   - package.json
 
+extraResources:
+  - from: google-oauth.json
+    to: google-oauth.json
+
 extraMetadata:
   main: dist-electron/main.js
 

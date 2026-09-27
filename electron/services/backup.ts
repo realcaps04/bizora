@@ -1,13 +1,14 @@
-import { app, dialog, BrowserWindow } from 'electron'
+import { app, dialog, BrowserWindow, safeStorage, shell } from 'electron'
 import { existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { exportRawDatabase, persistNow, replaceDatabaseFromBuffer, queryOne, queryAll } from '../database'
-import { deriveBackupKey, encryptBuffer, decryptBuffer, generateSalt, generateId } from '../security/crypto'
+import { deriveBackupKey, decryptBuffer } from '../security/crypto'
 import { AppError, requirePermission, requireAuth } from '../security/session'
 import { writeAudit } from './auth'
 import { getSettings } from './catalog'
 
 const MAGIC = Buffer.from('BIZORA1')
+const MAGIC_OPEN = Buffer.from('BIZORA2')
 
 function defaultBackupDir(): string {
   const dir = path.join(app.getPath('documents'), 'Bizora', 'Backups')
@@ -52,23 +53,15 @@ export function getBackupStatus() {
   }
 }
 
-export async function createBackup(password: string): Promise<{ path: string; name: string }> {
+export async function createBackup(): Promise<{ path: string; name: string }> {
   const user = requirePermission('backup.manage')
-  if (!password || password.length < 6) {
-    throw new AppError('Backup password must be at least 6 characters.', 'VALIDATION')
-  }
-
   persistNow()
   const raw = exportRawDatabase()
-  const salt = generateSalt()
-  const key = deriveBackupKey(password, salt)
-  const encrypted = encryptBuffer(raw, key)
-
   const company = queryOne<{ name: string }>('SELECT name FROM companies WHERE id = ?', [user.companyId])
   const meta = Buffer.from(
     JSON.stringify({
       app: 'Bizora',
-      version: 1,
+      version: 2,
       companyId: user.companyId,
       companyName: company?.name ?? 'Business',
       createdAt: new Date().toISOString(),
@@ -76,11 +69,9 @@ export async function createBackup(password: string): Promise<{ path: string; na
     }),
     'utf8',
   )
-
-  // Format: MAGIC | saltLen(1) | salt | metaLen(4) | meta | ciphertext
   const metaLen = Buffer.alloc(4)
   metaLen.writeUInt32BE(meta.length, 0)
-  const payload = Buffer.concat([MAGIC, Buffer.from([salt.length]), salt, metaLen, meta, encrypted])
+  const payload = Buffer.concat([MAGIC_OPEN, metaLen, meta, raw])
 
   const dir = resolveBackupDir()
   mkdirSync(dir, { recursive: true })
@@ -92,67 +83,84 @@ export async function createBackup(password: string): Promise<{ path: string; na
   return { path: filePath, name }
 }
 
-export async function inspectBackup(filePath: string, password: string) {
-  if (!existsSync(filePath)) throw new AppError('Backup file not found.', 'NOT_FOUND')
-  const payload = readFileSync(filePath)
-  if (payload.subarray(0, 7).toString() !== 'BIZORA1') {
-    throw new AppError('This file is not a valid Bizora backup.', 'INVALID_BACKUP')
+function backupPasswordPath(): string {
+  return path.join(app.getPath('userData'), 'security', 'backup-password.bin')
+}
+
+export function rememberBackupPassword(password: string): void {
+  if (!password || !safeStorage.isEncryptionAvailable()) return
+  mkdirSync(path.dirname(backupPasswordPath()), { recursive: true })
+  writeFileSync(backupPasswordPath(), safeStorage.encryptString(password))
+}
+
+export function readBackupPassword(): string | null {
+  const file = backupPasswordPath()
+  if (!existsSync(file) || !safeStorage.isEncryptionAvailable()) return null
+  try {
+    const password = safeStorage.decryptString(readFileSync(file))
+    return password.length >= 6 ? password : null
+  } catch {
+    return null
   }
+}
+
+export async function openBackupFolder(): Promise<string> {
+  requirePermission('backup.manage')
+  const dir = resolveBackupDir()
+  mkdirSync(dir, { recursive: true })
+  await shell.openPath(dir)
+  return dir
+}
+
+function readBackupFile(payload: Buffer, password?: string): { meta: { companyName?: string; createdAt?: string }; raw: Buffer } {
+  const magic = payload.subarray(0, 7).toString()
+  if (magic === 'BIZORA2') {
+    const metaLen = payload.readUInt32BE(7)
+    const metaStart = 11
+    const meta = JSON.parse(payload.subarray(metaStart, metaStart + metaLen).toString('utf8')) as {
+      companyName?: string
+      createdAt?: string
+    }
+    return { meta, raw: payload.subarray(metaStart + metaLen) }
+  }
+  if (magic !== 'BIZORA1') throw new AppError('This file is not a valid Bizora backup.', 'INVALID_BACKUP')
+  if (!password) throw new AppError('This older backup was saved with a password.', 'INVALID_PASSWORD')
   const saltLen = payload[7]
   const salt = payload.subarray(8, 8 + saltLen)
   const metaLen = payload.readUInt32BE(8 + saltLen)
   const metaStart = 8 + saltLen + 4
   const meta = JSON.parse(payload.subarray(metaStart, metaStart + metaLen).toString('utf8')) as {
-    companyName: string
-    createdAt: string
+    companyName?: string
+    createdAt?: string
   }
-  const cipher = payload.subarray(metaStart + metaLen)
   const key = deriveBackupKey(password, salt)
   try {
-    decryptBuffer(cipher, key)
+    return { meta, raw: decryptBuffer(payload.subarray(metaStart + metaLen), key) }
   } catch {
     throw new AppError('Incorrect backup password.', 'INVALID_PASSWORD')
   }
-  return meta
 }
 
-export async function restoreBackup(filePath: string, password: string) {
+export async function inspectBackup(filePath: string, password?: string) {
+  if (!existsSync(filePath)) throw new AppError('Backup file not found.', 'NOT_FOUND')
+  return readBackupFile(readFileSync(filePath), password).meta
+}
+
+export async function restoreBackup(filePath: string, password?: string) {
   const user = requirePermission('backup.manage')
-  const payload = readFileSync(filePath)
-  if (payload.subarray(0, 7).toString() !== 'BIZORA1') {
-    throw new AppError('This file is not a valid Bizora backup.', 'INVALID_BACKUP')
-  }
-
-  const saltLen = payload[7]
-  const salt = payload.subarray(8, 8 + saltLen)
-  const metaLen = payload.readUInt32BE(8 + saltLen)
-  const metaStart = 8 + saltLen + 4
-  const meta = JSON.parse(payload.subarray(metaStart, metaStart + metaLen).toString('utf8'))
-  const cipher = payload.subarray(metaStart + metaLen)
-  const key = deriveBackupKey(password, salt)
-
-  let raw: Buffer
-  try {
-    raw = decryptBuffer(cipher, key)
-  } catch {
-    throw new AppError('Incorrect backup password or corrupted backup.', 'INVALID_PASSWORD')
-  }
+  const { meta, raw } = readBackupFile(readFileSync(filePath), password)
 
   // Safety backup of current DB before restore
   try {
     const safetyDir = path.join(resolveBackupDir(), 'pre-restore')
     mkdirSync(safetyDir, { recursive: true })
     const safetyName = `PreRestore_${stamp()}.bizora`
-    const safetyPass = generateId()
-    const safetySalt = generateSalt()
-    const safetyKey = deriveBackupKey(safetyPass, safetySalt)
-    const safetyEnc = encryptBuffer(exportRawDatabase(), safetyKey)
     const safetyMeta = Buffer.from(JSON.stringify({ note: 'auto pre-restore', createdAt: new Date().toISOString() }), 'utf8')
     const ml = Buffer.alloc(4)
     ml.writeUInt32BE(safetyMeta.length, 0)
     writeFileSync(
       path.join(safetyDir, safetyName),
-      Buffer.concat([MAGIC, Buffer.from([safetySalt.length]), safetySalt, ml, safetyMeta, safetyEnc]),
+      Buffer.concat([MAGIC_OPEN, ml, safetyMeta, exportRawDatabase()]),
     )
   } catch {
     /* best-effort */

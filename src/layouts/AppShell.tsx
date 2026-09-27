@@ -22,7 +22,8 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/stores/app'
 import { callApi, cn } from '@/utils'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Button, Toast } from '@/components/ui'
 import { BrandLogo } from '@/components/BrandLogo'
 import { WindowControls } from '@/components/login/WindowControls'
@@ -209,20 +210,32 @@ export function AppShell() {
               </div>
             </div>
           ) : (
-            <BrandLogo size="sm" className="shrink-0" />
+            <CollapsedTip label="Bizora">
+              <BrandLogo size="sm" className="shrink-0" />
+            </CollapsedTip>
           )}
-          <button
-            type="button"
-            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            onClick={toggleSidebar}
-            className={cn(
-              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white',
-              sidebarOpen ? 'absolute right-2 top-1/2 -translate-y-1/2' : '',
-            )}
-          >
-            {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          </button>
+          {sidebarOpen ? (
+            <button
+              type="button"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+              onClick={toggleSidebar}
+              className="absolute right-2 top-1/2 inline-flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          ) : (
+            <CollapsedTip label="Expand sidebar">
+              <button
+                type="button"
+                aria-label="Expand sidebar"
+                onClick={toggleSidebar}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            </CollapsedTip>
+          )}
         </div>
 
         <nav
@@ -265,24 +278,26 @@ export function AppShell() {
             </>
           ) : (
             <div className="flex flex-col items-center gap-1">
-              <button
-                type="button"
-                title="Lock Application"
-                aria-label="Lock Application"
-                onClick={() => void lockApp()}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
-              >
-                <Lock size={15} />
-              </button>
-              <button
-                type="button"
-                title="Logout"
-                aria-label="Logout"
-                onClick={() => setLogoutOpen(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
-              >
-                <LogOut size={15} />
-              </button>
+              <CollapsedTip label="Lock Application" className="w-full justify-center">
+                <button
+                  type="button"
+                  aria-label="Lock Application"
+                  onClick={() => void lockApp()}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
+                >
+                  <Lock size={15} />
+                </button>
+              </CollapsedTip>
+              <CollapsedTip label="Logout" className="w-full justify-center">
+                <button
+                  type="button"
+                  aria-label="Logout"
+                  onClick={() => setLogoutOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
+                >
+                  <LogOut size={15} />
+                </button>
+              </CollapsedTip>
             </div>
           )}
         </div>
@@ -360,6 +375,51 @@ export function AppShell() {
   )
 }
 
+function CollapsedTip({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  const anchor = useRef<HTMLSpanElement>(null)
+  const [box, setBox] = useState<{ top: number; left: number } | null>(null)
+
+  function place() {
+    const rect = anchor.current?.getBoundingClientRect()
+    if (!rect) return
+    setBox({ top: rect.top + rect.height / 2, left: rect.right + 8 })
+  }
+
+  useEffect(() => {
+    if (!box) return
+    const move = () => place()
+    window.addEventListener('scroll', move, true)
+    window.addEventListener('resize', move)
+    return () => {
+      window.removeEventListener('scroll', move, true)
+      window.removeEventListener('resize', move)
+    }
+  }, [box])
+
+  return (
+    <>
+      <span ref={anchor} className={cn('flex', className)} onMouseEnter={place} onMouseLeave={() => setBox(null)}>
+        {children}
+      </span>
+      {box
+        ? createPortal(
+            <span
+              role="tooltip"
+              className="no-print pointer-events-none fixed z-[80] flex items-center"
+              style={{ top: box.top, left: box.left, animation: 'bizora-tip 140ms ease-out forwards' }}
+            >
+              <span className="h-2 w-2 -mr-1 rotate-45 rounded-[1px] bg-white shadow-[-1px_1px_1px_rgba(3,28,69,0.06)]" />
+              <span className="rounded-md bg-white px-2.5 py-[5px] text-[12px] font-medium tracking-tight text-[#031C45] shadow-[0_8px_22px_rgba(3,28,69,0.16)] ring-1 ring-[#E3EAF3]">
+                {label}
+              </span>
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
+  )
+}
+
 function NavGroup({
   items,
   collapsed,
@@ -371,21 +431,37 @@ function NavGroup({
     <div className="space-y-0.5">
       {items.map((item) => (
         <div key={item.to}>
-          <NavLink
-            to={item.to}
-            end={item.end}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center rounded-md text-[13px] font-medium transition-colors',
-                collapsed ? 'h-9 w-full justify-center' : 'gap-2 px-2.5 py-[6px]',
-                isActive ? 'bg-sidebar-active text-white' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white',
-              )
-            }
-          >
-            <item.icon size={15} />
-            {!collapsed ? item.label : null}
-          </NavLink>
+          {collapsed ? (
+            <CollapsedTip label={item.label} className="w-full">
+              <NavLink
+                to={item.to}
+                end={item.end}
+                aria-label={item.label}
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-9 w-full items-center justify-center rounded-md text-[13px] font-medium transition-colors',
+                    isActive ? 'bg-sidebar-active text-white' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white',
+                  )
+                }
+              >
+                <item.icon size={15} />
+              </NavLink>
+            </CollapsedTip>
+          ) : (
+            <NavLink
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2 rounded-md px-2.5 py-[6px] text-[13px] font-medium transition-colors',
+                  isActive ? 'bg-sidebar-active text-white' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white',
+                )
+              }
+            >
+              <item.icon size={15} />
+              {item.label}
+            </NavLink>
+          )}
 
           {!collapsed && item.children?.length ? (
             <div className="mt-0.5 ml-3 space-y-0.5 border-l border-white/10 pl-2">

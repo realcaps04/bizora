@@ -108,6 +108,17 @@ textarea {
   border: 2px solid transparent;
 }
 
+@keyframes bizora-tip {
+  from {
+    opacity: 0;
+    transform: translate(-4px, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+
 @media print {
   @page {
     size: A4;

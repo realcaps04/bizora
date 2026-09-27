@@ -83,10 +83,27 @@ const api = {
   reportInventory: () => invoke(IpcChannels.REPORTS_INVENTORY),
   reportTax: (opts?: Record<string, unknown>) => invoke(IpcChannels.REPORTS_TAX, opts),
   backupStatus: () => invoke(IpcChannels.BACKUP_STATUS),
-  createBackup: (password: string) => invoke(IpcChannels.BACKUP_CREATE, { password }),
-  restoreBackup: (password: string, filePath?: string) =>
+  createBackup: () =>
+    invoke<{ name: string; path: string; drive: 'uploaded' | 'skipped' | 'off' | 'failed'; driveError: string }>(
+      IpcChannels.BACKUP_CREATE,
+    ),
+  openBackupFolder: () => invoke<string>(IpcChannels.BACKUP_OPEN_FOLDER),
+  restoreBackup: (password?: string, filePath?: string) =>
     invoke(IpcChannels.BACKUP_RESTORE, { password, filePath }),
   chooseBackupLocation: () => invoke(IpcChannels.BACKUP_CHOOSE_LOCATION),
+  googleDriveStatus: () =>
+    invoke<{
+      configured: boolean
+      connected: boolean
+      email: string | null
+      backups: { id: string; name: string; createdAt: string; size: number }[]
+    }>(IpcChannels.DRIVE_STATUS),
+  connectGoogleDrive: () => invoke<{ email: string }>(IpcChannels.DRIVE_CONNECT),
+  disconnectGoogleDrive: () => invoke(IpcChannels.DRIVE_DISCONNECT),
+  backupToGoogleDrive: () => invoke<{ name: string }>(IpcChannels.DRIVE_BACKUP),
+  uploadLatestToGoogleDrive: () =>
+    invoke<{ name: string; result: 'uploaded' | 'skipped' | 'off' }>(IpcChannels.DRIVE_UPLOAD_LATEST),
+  restoreFromGoogleDrive: (fileId: string) => invoke(IpcChannels.DRIVE_RESTORE, { fileId }),
   exportData: (category: string, format?: 'csv' | 'json') =>
     invoke(IpcChannels.EXPORT_DATA, { category, format }),
   getSettings: () => invoke(IpcChannels.SETTINGS_GET),

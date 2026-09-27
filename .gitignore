@@ -21,6 +21,7 @@ release
 # Env
 .env
 .env.*
+google-oauth.json
 
 # Database / backups (local)
 *.db

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { initDatabase, closeDatabase, persistNow } from './database'
 import { registerIpcHandlers } from './ipc/handlers'
+import { startAutomaticBackups } from './services/backupSchedule'
 import { shouldAutoLock, lockSession, restoreSession } from './security/session'
 import {
   applyWindowsIdentity,
@@ -104,6 +105,7 @@ function boot(): void {
       await initDatabase()
       restoreSession()
       registerIpcHandlers()
+      startAutomaticBackups()
       createWindow()
     } catch (error) {
       console.error('[Bizora] Failed to start:', error)

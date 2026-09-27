@@ -138,9 +138,25 @@ export interface BizoraApi {
   reportInventory: () => Promise<ApiResult<unknown>>
   reportTax: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   backupStatus: () => Promise<ApiResult<unknown>>
-  createBackup: (password: string) => Promise<ApiResult<unknown>>
-  restoreBackup: (password: string, filePath?: string) => Promise<ApiResult<unknown>>
+  createBackup: () => Promise<
+    ApiResult<{ name: string; path: string; drive: 'uploaded' | 'skipped' | 'off' | 'failed'; driveError: string }>
+  >
+  openBackupFolder: () => Promise<ApiResult<string>>
+  restoreBackup: (password?: string, filePath?: string) => Promise<ApiResult<unknown>>
   chooseBackupLocation: () => Promise<ApiResult<unknown>>
+  googleDriveStatus: () => Promise<
+    ApiResult<{
+      configured: boolean
+      connected: boolean
+      email: string | null
+      backups: { id: string; name: string; createdAt: string; size: number }[]
+    }>
+  >
+  connectGoogleDrive: () => Promise<ApiResult<{ email: string }>>
+  disconnectGoogleDrive: () => Promise<ApiResult<unknown>>
+  backupToGoogleDrive: () => Promise<ApiResult<{ name: string }>>
+  uploadLatestToGoogleDrive: () => Promise<ApiResult<{ name: string; result: 'uploaded' | 'skipped' | 'off' }>>
+  restoreFromGoogleDrive: (fileId: string) => Promise<ApiResult<unknown>>
   exportData: (category: string, format?: 'csv' | 'json') => Promise<ApiResult<unknown>>
   getSettings: () => Promise<ApiResult<unknown>>
   updateSettings: (data: Record<string, string>) => Promise<ApiResult<unknown>>

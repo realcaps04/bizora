@@ -8,6 +8,7 @@ import * as invoices from '../services/invoices'
 import * as operations from '../services/operations'
 import * as reports from '../services/reports'
 import * as backup from '../services/backup'
+import * as googleDrive from '../services/googleDrive'
 import { closeDatabase, persistNow } from '../database'
 import * as appUpdate from '../services/appUpdate'
 
@@ -197,7 +198,18 @@ export function registerIpcHandlers(): void {
     [IpcChannels.REPORTS_INVENTORY]: () => reports.reportInventory(),
     [IpcChannels.REPORTS_TAX]: (payload) => reports.reportTax((payload as object) || {}),
     [IpcChannels.BACKUP_STATUS]: () => backup.getBackupStatus(),
-    [IpcChannels.BACKUP_CREATE]: async (payload) => backup.createBackup((payload as { password: string }).password),
+    [IpcChannels.BACKUP_CREATE]: async (payload) => {
+      const created = await backup.createBackup()
+      let drive: 'uploaded' | 'skipped' | 'off' | 'failed' = 'off'
+      let driveError = ''
+      try {
+        drive = await googleDrive.uploadLocalBackup(created.path, created.name)
+      } catch (error) {
+        drive = 'failed'
+        driveError = error instanceof AppError ? error.message : 'Google Drive upload failed.'
+      }
+      return { ...created, drive, driveError }
+    },
     [IpcChannels.BACKUP_RESTORE]: async (payload, win) => {
       const p = payload as { password: string; filePath?: string }
       let filePath = p.filePath
@@ -209,6 +221,13 @@ export function registerIpcHandlers(): void {
       return { filePath, meta, restore: await backup.restoreBackup(filePath, p.password) }
     },
     [IpcChannels.BACKUP_CHOOSE_LOCATION]: async (_payload, win) => backup.chooseBackupLocation(win),
+    [IpcChannels.BACKUP_OPEN_FOLDER]: () => backup.openBackupFolder(),
+    [IpcChannels.DRIVE_STATUS]: () => googleDrive.getDriveStatus(),
+    [IpcChannels.DRIVE_CONNECT]: () => googleDrive.connectDrive(),
+    [IpcChannels.DRIVE_DISCONNECT]: () => googleDrive.disconnectDrive(),
+    [IpcChannels.DRIVE_BACKUP]: () => googleDrive.backupToDrive(),
+    [IpcChannels.DRIVE_UPLOAD_LATEST]: () => googleDrive.uploadLatestLocalBackup(),
+    [IpcChannels.DRIVE_RESTORE]: (payload) => googleDrive.restoreFromDrive((payload as { fileId: string }).fileId),
     [IpcChannels.EXPORT_DATA]: (payload) => {
       const p = payload as { category: string; format?: 'csv' | 'json' }
       return backup.exportData(p.category, p.format)

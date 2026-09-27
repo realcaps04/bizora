@@ -179,8 +179,6 @@ export function BackupPage() {
     lastBackup: { name: string; mtime: string } | null
     backups: { name: string; mtime: string }[]
   } | null>(null)
-  const [password, setPassword] = useState('')
-  const [restorePassword, setRestorePassword] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function refresh() {
@@ -195,9 +193,8 @@ export function BackupPage() {
   async function backupNow() {
     setBusy(true)
     try {
-      const result = await callApi(() => window.bizora.createBackup(password))
-      showToast(`Backup created: ${(result as { name: string }).name}`, 'success')
-      setPassword('')
+      const result = await callApi(() => window.bizora.createBackup())
+      showToast(`Backup created: ${result.name}`, 'success')
       await refresh()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Backup failed', 'error')
@@ -210,7 +207,7 @@ export function BackupPage() {
     if (!confirm('Restore Backup?\n\nThis will replace the current business database. A safety copy will be kept when possible.')) return
     setBusy(true)
     try {
-      const result = await callApi(() => window.bizora.restoreBackup(restorePassword))
+      const result = await callApi(() => window.bizora.restoreBackup())
       if (!result) {
         showToast('Restore cancelled', 'info')
         return
@@ -247,11 +244,8 @@ export function BackupPage() {
           </div>
           <div className="mt-4 text-xs font-medium text-ink-muted">Backup Location</div>
           <div className="mt-1 break-all text-sm text-ink-muted">{status.location}</div>
-          <div className="mt-5 space-y-3">
-            <Field label="Backup Password">
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 6 characters" />
-            </Field>
-            <Button disabled={busy || password.length < 6} onClick={() => void backupNow()}>
+          <div className="mt-5">
+            <Button disabled={busy} onClick={() => void backupNow()}>
               Backup Now
             </Button>
           </div>
@@ -259,12 +253,9 @@ export function BackupPage() {
 
         <Card className="p-5">
           <h2 className="text-sm font-semibold">Restore Backup</h2>
-          <p className="mt-1 text-sm text-ink-muted">Select an encrypted .bizora file and enter its password.</p>
+          <p className="mt-1 text-sm text-ink-muted">Select a .bizora backup file.</p>
           <div className="mt-4 space-y-3">
-            <Field label="Backup Password">
-              <Input type="password" value={restorePassword} onChange={(e) => setRestorePassword(e.target.value)} />
-            </Field>
-            <Button variant="secondary" disabled={busy || restorePassword.length < 6} onClick={() => void restore()}>
+            <Button variant="secondary" disabled={busy} onClick={() => void restore()}>
               Restore Backup
             </Button>
           </div>
@@ -399,6 +390,18 @@ export function SettingsPage() {
   async function saveSettings() {
     await callApi(() => window.bizora.updateSettings(settings))
     showToast('Settings saved', 'success')
+  }
+
+  async function setGoogleDriveChoice(on: boolean) {
+    const next = { ...settings, google_drive_backup: on ? 'true' : 'false' }
+    setSettings(next)
+    try {
+      await callApi(() => window.bizora.updateSettings({ google_drive_backup: next.google_drive_backup }))
+      if (!on) await callApi(() => window.bizora.disconnectGoogleDrive())
+      showToast(on ? 'Google Drive backup is on for this business' : 'Google Drive backup is off', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update Google Drive backup', 'error')
+    }
   }
 
   async function saveInvoiceSettings() {
@@ -666,16 +669,43 @@ export function SettingsPage() {
       ) : null}
 
       {tab === 'backup' ? (
-        <Card className="max-w-xl space-y-3 p-5">
-          <Field label="Backup Schedule">
-            <Select value={settings.backup_schedule || 'daily'} onChange={(e) => setSettings({ ...settings, backup_schedule: e.target.value })}>
-              <option value="daily">Every day</option>
-              <option value="weekly">Every week</option>
-              <option value="manual">Manual only</option>
-            </Select>
-          </Field>
-          <Button onClick={() => void saveSettings()}>Save</Button>
-        </Card>
+        <div className="max-w-3xl space-y-4">
+          <Card className="space-y-3 p-5">
+            <h2 className="text-sm font-semibold">Backup on this computer</h2>
+            <p className="text-sm text-ink-muted">
+              Backup Now saves a BusinessBackup file in the folder below. If Google Drive is on, that same file is uploaded to the connected account.
+            </p>
+            <LocalBackupCard />
+            <Field label="Backup Schedule">
+              <Select value={settings.backup_schedule || 'daily'} onChange={(e) => setSettings({ ...settings, backup_schedule: e.target.value })}>
+                <option value="daily">Every day</option>
+                <option value="weekly">Every week</option>
+                <option value="manual">Manual only</option>
+              </Select>
+            </Field>
+            <p className="text-xs text-ink-muted">
+              Every day or every week, while Bizora is open, a new backup file is saved in that folder. If Google Drive is on, it is uploaded too.
+            </p>
+            <Button onClick={() => void saveSettings()}>Save</Button>
+          </Card>
+          <Card className="space-y-4 p-5">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={settings.google_drive_backup === 'true'}
+                onChange={(e) => void setGoogleDriveChoice(e.target.checked)}
+              />
+              <span>
+                <span className="text-sm font-semibold">Google Drive backup</span>
+                <span className="mt-1 block text-sm text-ink-muted">
+                  Optional. Leave this off and the backup stays only in the folder above. Turn it on to upload that file to this business’s Google Drive.
+                </span>
+              </span>
+            </label>
+            {settings.google_drive_backup === 'true' ? <GoogleDrivePanel /> : null}
+          </Card>
+        </div>
       ) : null}
 
       {tab === 'appearance' ? (
@@ -703,6 +733,194 @@ export function SettingsPage() {
       ) : null}
 
       {tab === 'audit' ? <AuditPanel /> : null}
+    </div>
+  )
+}
+
+function LocalBackupCard() {
+  const { showToast } = useAppStore()
+  const [status, setStatus] = useState<{
+    location: string
+    lastBackup: { name: string; mtime: string } | null
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void callApi(() => window.bizora.backupStatus()).then((data) => {
+      setStatus(data as { location: string; lastBackup: { name: string; mtime: string } | null })
+    })
+  }, [])
+
+  async function backupNow() {
+    setBusy(true)
+    try {
+      const result = await callApi(() => window.bizora.createBackup())
+      if (result.drive === 'uploaded') showToast(`Saved ${result.name} and uploaded it to Google Drive`, 'success')
+      else if (result.drive === 'failed') showToast(`Saved ${result.name} on this computer. ${result.driveError}`, 'error')
+      else showToast(`Backup saved on this computer: ${result.name}`, 'success')
+      const data = await callApi(() => window.bizora.backupStatus())
+      setStatus(data as { location: string; lastBackup: { name: string; mtime: string } | null })
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Backup failed', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="text-sm text-ink-muted">
+        {status?.lastBackup ? `Last file: ${status.lastBackup.name} · ${formatDateTime(status.lastBackup.mtime)}` : 'No backup file yet'}
+      </div>
+      {status?.location ? (
+        <div className="space-y-2">
+          <div className="break-all text-xs text-ink-muted">{status.location}</div>
+          <Button variant="outline" onClick={() => void callApi(() => window.bizora.openBackupFolder())}>
+            Open backup folder
+          </Button>
+        </div>
+      ) : null}
+      <Button disabled={busy} onClick={() => void backupNow()}>
+        {busy ? 'Saving…' : 'Backup Now'}
+      </Button>
+    </div>
+  )
+}
+
+function GoogleDrivePanel() {
+  const { showToast } = useAppStore()
+  const [status, setStatus] = useState<{
+    configured: boolean
+    connected: boolean
+    email: string | null
+    backups: { id: string; name: string; createdAt: string; size: number }[]
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
+
+  async function refresh() {
+    const data = await callApi(() => window.bizora.googleDriveStatus())
+    setStatus(data)
+    setLoadError('')
+  }
+
+  useEffect(() => {
+    void refresh().catch((err) => {
+      setLoadError(err instanceof Error ? err.message : 'Google Drive is unavailable')
+    })
+  }, [])
+
+  async function connect() {
+    setBusy(true)
+    try {
+      const result = await callApi(() => window.bizora.connectGoogleDrive())
+      showToast(result.email ? `Connected as ${result.email}` : 'Google Drive connected', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Google Drive sign-in failed', 'error')
+    } finally {
+      try {
+        await refresh()
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : 'Google Drive is unavailable')
+      }
+      setBusy(false)
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true)
+    try {
+      await callApi(() => window.bizora.disconnectGoogleDrive())
+      showToast('Google Drive disconnected', 'success')
+      await refresh()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not disconnect Google Drive', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function uploadLatest() {
+    setBusy(true)
+    try {
+      const result = await callApi(() => window.bizora.uploadLatestToGoogleDrive())
+      showToast(
+        result.result === 'skipped' ? `${result.name} is already in Google Drive` : `Uploaded ${result.name}`,
+        'success',
+      )
+      await refresh()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Google Drive backup failed', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function restore(fileId: string, name: string) {
+    if (!confirm(`Restore ${name}?\n\nThis replaces the business data on this computer.`)) return
+    setBusy(true)
+    try {
+      await callApi(() => window.bizora.restoreFromGoogleDrive(fileId))
+      showToast('Backup restored from Google Drive', 'success')
+      window.location.reload()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Restore failed', 'error')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 border-t border-border pt-4">
+      {!status && !loadError ? <p className="text-sm text-ink-muted">Checking Google Drive…</p> : null}
+      {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
+      {status && !status.configured ? (
+        <p className="text-sm text-ink-muted">Google Drive is not configured on this computer.</p>
+      ) : null}
+      {status?.configured && !status.connected ? (
+        <Button disabled={busy} onClick={() => void connect()}>
+          {busy ? 'Waiting for Google…' : 'Connect Google Drive'}
+        </Button>
+      ) : null}
+      {status?.connected ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+            <div>
+              <div className="text-sm font-semibold text-emerald-950">Google Drive connected</div>
+              <div className="text-[13px] text-emerald-900">{status.email || 'Signed in'}</div>
+            </div>
+            <Button variant="outline" disabled={busy} onClick={() => void disconnect()}>
+              Disconnect
+            </Button>
+          </div>
+          <p className="text-sm text-ink-muted">New backups on this computer are uploaded to this Google account.</p>
+          <Button disabled={busy} onClick={() => void uploadLatest()}>
+            {busy ? 'Working…' : 'Upload the latest file now'}
+          </Button>
+          {status.backups.length > 0 ? (
+            <div className="overflow-hidden rounded-md border border-border">
+              <div className="border-b border-border px-3 py-2 text-xs font-medium text-ink-muted">Backups in Google Drive</div>
+              {status.backups.map((file) => (
+                <div key={file.id} className="flex items-center justify-between gap-3 border-t border-border px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium">{file.name}</div>
+                    <div className="text-xs text-ink-muted">{formatDateTime(file.createdAt)}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void restore(file.id, file.name)}
+                  >
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-ink-muted">No Google Drive backups yet.</p>
+          )}
+        </>
+      ) : null}
     </div>
   )
 }
@@ -834,11 +1052,10 @@ export function StaffPage() {
 export function RestorePage() {
   const navigate = useNavigate()
   const { showToast, bootstrap } = useAppStore()
-  const [password, setPassword] = useState('')
 
   async function restore() {
     try {
-      const result = await callApi(() => window.bizora.restoreBackup(password))
+      const result = await callApi(() => window.bizora.restoreBackup())
       if (!result) return
       showToast('Backup restored. Please sign in.', 'success')
       await bootstrap()
@@ -853,17 +1070,12 @@ export function RestorePage() {
       <Card className="w-full max-w-md p-8">
         <BrandLogo size="lg" className="mb-4" />
         <h1 className="text-xl font-semibold">Open Existing Backup</h1>
-        <p className="mt-2 text-sm text-ink-muted">Choose an encrypted backup file and enter its password.</p>
-        <Field label="Backup Password" className="mt-5">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </Field>
+        <p className="mt-2 text-sm text-ink-muted">Choose a Bizora backup file.</p>
         <div className="mt-5 flex gap-2">
           <Button variant="outline" onClick={() => navigate('/sales/new')}>
             Cancel
           </Button>
-          <Button disabled={password.length < 6} onClick={() => void restore()}>
-            Restore
-          </Button>
+          <Button onClick={() => void restore()}>Restore</Button>
         </div>
       </Card>
     </div>
