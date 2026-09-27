@@ -1,0 +1,102 @@
+# Bizora — Windows packaging (Microsoft desktop compliance)
+# https://www.electron.build/configuration/configuration
+
+appId: com.bizora.app
+productName: Bizora
+copyright: Copyright © 2026 Bizora
+artifactName: ${productName}-Setup-${version}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+extraMetadata:
+  main: dist-electron/main.js
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - "**/sql.js/dist/sql-wasm.wasm"
+
+# Do not auto-publish; release manually after signing
+publish: null
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    # Optional enterprise / Store-ready package (build with: --win appx)
+    # - target: appx
+    #   arch:
+    #     - x64
+  icon: build/icon.png
+  # Microsoft desktop expectation: run as normal user, not Administrator
+  requestedExecutionLevel: asInvoker
+  # Shown in file properties / UAC / SmartScreen attribution once signed
+  publisherName: Bizora
+  legalTrademarks: Bizora
+  # SHA-256 only (Microsoft deprecates SHA-1 for Authenticode)
+  signingHashAlgorithms:
+    - sha256
+  # Embed ProductName / FileDescription / CompanyName into the .exe
+  signAndEditExecutable: true
+  # Set CSC_LINK / CSC_KEY_PASSWORD (or Windows Trusted Signing) for production
+  # forceCodeSigning: true
+  verifyUpdateCodeSignature: false
+  executableName: Bizora
+  fileAssociations: []
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  # Let the user choose — Microsoft guidance: don't force desktop clutter
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Bizora
+  menuCategory: false
+  installerIcon: build/icon.png
+  uninstallerIcon: build/icon.png
+  installerHeaderIcon: build/icon.png
+  installerSidebar: null
+  uninstallerSidebar: null
+  license: build/license.txt
+  uninstallDisplayName: Bizora
+  # CRITICAL: never wipe business databases on uninstall by default
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  include: build/installer.nsh
+  installerLanguages:
+    - English
+  displayLanguageSelector: false
+  multiLanguageInstaller: false
+  packElevateHelper: true
+  differentialPackage: false
+  warningsAsErrors: false
+  guid: com.bizora.app
+
+# Microsoft Store / Intune sideload format (optional)
+appx:
+  applicationId: Bizora
+  identityName: Bizora.Billing
+  publisher: CN=Bizora
+  publisherDisplayName: Bizora
+  displayName: Bizora
+  languages:
+    - en-US
+  showNameOnTiles: true
+  setBuildNumber: true
+  # Electron desktop apps typically need full trust
+  # capabilities added by electron-builder defaults include runFullTrust
+
+protocols: []
+
+# Extra Windows PE metadata via electron-builder (FileDescription etc.)
+# Values derive from productName / description / author / copyright above.
