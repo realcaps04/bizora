@@ -50,6 +50,11 @@ export function ProductsPage() {
   const [mode, setMode] = useState<'pick' | 'import'>('pick')
   const [category, setCategory] = useState(COMPANY_CATEGORIES[0].id)
   const [importing, setImporting] = useState(false)
+  const [csvOpen, setCsvOpen] = useState(false)
+  const [csvCategory, setCsvCategory] = useState('agro-hardware')
+  const [csvText, setCsvText] = useState('')
+  const [csvName, setCsvName] = useState('')
+  const [csvImporting, setCsvImporting] = useState(false)
 
   useEffect(() => {
     if (params.get('add') === '1' || params.get('new') === '1') setChooser(true)
@@ -195,6 +200,9 @@ export function ProductsPage() {
             <Link to="/products/bulk">
               <Button variant="outline">Bulk add</Button>
             </Link>
+            <Button variant="outline" onClick={() => setCsvOpen(true)}>
+              Import CSV
+            </Button>
             <Button onClick={() => setChooser(true)}>Add Product</Button>
           </div>
         }
@@ -532,6 +540,19 @@ export function ProductsPage() {
                 Type one product yourself. It is saved for this company and added to the shared catalog.
               </p>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                closeChooser()
+                setCsvOpen(true)
+              }}
+              className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 text-left hover:border-[#0878F9] sm:col-span-2"
+            >
+              <div className="text-[14px] font-semibold text-[#031C45]">Import from CSV</div>
+              <p className="mt-1 text-[12px] leading-relaxed text-[#62789A]">
+                Load a spreadsheet with name, SKU, GST, prices, opening stock, category, HSN and barcode.
+              </p>
+            </button>
           </div>
         ) : (
           <div>
@@ -548,6 +569,77 @@ export function ProductsPage() {
             </Select>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={csvOpen}
+        title="Import products from CSV"
+        onClose={() => {
+          if (!csvImporting) setCsvOpen(false)
+        }}
+        footer={
+          <>
+            <Button variant="outline" disabled={csvImporting} onClick={() => setCsvOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={csvImporting || !csvText || !csvCategory}
+              onClick={() => {
+                setCsvImporting(true)
+                void callApi(() => window.bizora.importProductsCsv(csvCategory, csvText))
+                  .then((result) => {
+                    const count = (result as { count?: number; skipped?: number }).count ?? 0
+                    const skipped = (result as { skipped?: number }).skipped ?? 0
+                    const label = COMPANY_CATEGORIES.find((item) => item.id === csvCategory)?.name || csvCategory
+                    showToast(
+                      skipped
+                        ? `${count} products imported into ${label}. ${skipped} already in this company were skipped.`
+                        : `${count} products imported into ${label}`,
+                      'success',
+                    )
+                    setCsvOpen(false)
+                    setCsvText('')
+                    setCsvName('')
+                    void load()
+                  })
+                  .catch((err) => showToast(err instanceof Error ? err.message : 'Unable to import the CSV', 'error'))
+                  .finally(() => setCsvImporting(false))
+              }}
+            >
+              {csvImporting ? 'Importing…' : 'Import products'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13px] leading-relaxed text-[#62789A]">
+          Use a CSV with columns name, sku, tax_type, gst_rate, purchase_rate, selling_rate, opening_stock, category, hsn
+          and barcode. The company category you choose is stored with every row.
+        </p>
+        <label className="mb-1 mt-4 block text-[12px] font-medium text-[#62789A]">Company category</label>
+        <Select value={csvCategory} onChange={(e) => setCsvCategory(e.target.value)}>
+          {COMPANY_CATEGORIES.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </Select>
+        <label className="mb-1 mt-4 block text-[12px] font-medium text-[#62789A]">CSV file</label>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          className="block w-full text-[13px] text-ink file:mr-3 file:rounded-md file:border file:border-border file:bg-white file:px-3 file:py-1.5 file:text-[13px] file:font-medium"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (!file) {
+              setCsvText('')
+              setCsvName('')
+              return
+            }
+            setCsvName(file.name)
+            void file.text().then(setCsvText)
+          }}
+        />
+        {csvName ? <p className="mt-2 text-[12px] text-[#62789A]">{csvName}</p> : null}
       </Modal>
     </div>
   )

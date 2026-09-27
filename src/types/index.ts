@@ -73,6 +73,9 @@ export interface Invoice {
 
 export interface BizoraApi {
   getState: () => Promise<ApiResult<unknown>>
+  checkForUpdate: () => Promise<ApiResult<{ current: string; latest: string } | null>>
+  installUpdate: () => Promise<ApiResult<{ version: string }>>
+  onUpdateProgress?: (cb: (percent: number) => void) => () => void
   lock: () => Promise<ApiResult<unknown>>
   unlock: (pin: string) => Promise<ApiResult<unknown>>
   logout: () => Promise<ApiResult<unknown>>
@@ -101,6 +104,7 @@ export interface BizoraApi {
   listStarterCatalogs: () => Promise<ApiResult<unknown>>
   previewStarterCatalog: (catalogId: string, opts?: { search?: string; page?: number; pageSize?: number }) => Promise<ApiResult<unknown>>
   importStarterCatalog: (catalogId: string) => Promise<ApiResult<unknown>>
+  importProductsCsv: (companyCategory: string, csvText: string) => Promise<ApiResult<unknown>>
   updateProduct: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   deleteProduct: (id: string) => Promise<ApiResult<unknown>>
   deleteProducts: (ids: string[]) => Promise<ApiResult<unknown>>

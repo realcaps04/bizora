@@ -9,6 +9,13 @@ function invoke<T>(channel: string, payload?: unknown): Promise<ApiResult<T>> {
 
 const api = {
   getState: () => invoke(IpcChannels.APP_GET_STATE),
+  checkForUpdate: () => invoke<{ current: string; latest: string } | null>(IpcChannels.APP_CHECK_UPDATE),
+  installUpdate: () => invoke<{ version: string }>(IpcChannels.APP_INSTALL_UPDATE),
+  onUpdateProgress: (cb: (percent: number) => void) => {
+    const listener = (_event: unknown, percent: number) => cb(percent)
+    ipcRenderer.on('app:update-progress', listener)
+    return () => ipcRenderer.removeListener('app:update-progress', listener)
+  },
   lock: () => invoke(IpcChannels.APP_LOCK),
   unlock: (pin: string) => invoke(IpcChannels.APP_UNLOCK, { pin }),
   logout: () => invoke(IpcChannels.APP_LOGOUT),
@@ -40,6 +47,8 @@ const api = {
   previewStarterCatalog: (catalogId: string, opts?: { search?: string; page?: number; pageSize?: number }) =>
     invoke(IpcChannels.PRODUCTS_PREVIEW_STARTER, { catalogId, ...opts }),
   importStarterCatalog: (catalogId: string) => invoke(IpcChannels.PRODUCTS_IMPORT_STARTER, { catalogId }),
+  importProductsCsv: (companyCategory: string, csvText: string) =>
+    invoke(IpcChannels.PRODUCTS_IMPORT_CSV, { companyCategory, csvText }),
   updateProduct: (data: Record<string, unknown>) => invoke(IpcChannels.PRODUCTS_UPDATE, data),
   deleteProduct: (id: string) => invoke(IpcChannels.PRODUCTS_DELETE, { id }),
   deleteProducts: (ids: string[]) => invoke(IpcChannels.PRODUCTS_DELETE, { ids }),

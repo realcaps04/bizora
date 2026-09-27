@@ -43,6 +43,7 @@ interface CatalogRow {
   taxRate: number
   purchaseRate: number
   sellingRate: number
+  openingStock: number
 }
 
 const countCache = new Map<string, number>()
@@ -80,16 +81,16 @@ function splitCsvLine(line: string): string[] {
   return cells
 }
 
-function readCatalogRows(fileName: string): CatalogRow[] {
-  const file = catalogFile(fileName)
-  if (!file) return []
-  const text = readFileSync(file, 'utf8')
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+export function parseProductCsv(text: string): CatalogRow[] {
+  const lines = text
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
   if (lines.length < 2) return []
   const headers = splitCsvLine(lines[0]).map((header) => header.toLowerCase().replace(/\s+/g, '_'))
   const at = (names: string[]) => headers.findIndex((header) => names.includes(header))
-  const nameAt = at(['name', 'product', 'product_name'])
-  if (nameAt < 0) return []
+  if (at(['name', 'product', 'product_name']) < 0) return []
   const rows: CatalogRow[] = []
   const seen = new Set<string>()
   for (const line of lines.slice(1)) {
@@ -116,9 +117,16 @@ function readCatalogRows(fileName: string): CatalogRow[] {
       taxRate: exempt ? 0 : rate,
       purchaseRate: Number(pick(['purchase_rate', 'purchase', 'cost'])) || 0,
       sellingRate: Number(pick(['selling_rate', 'sale_rate', 'sale', 'price'])) || 0,
+      openingStock: Number(pick(['opening_stock', 'stock', 'qty', 'quantity'])) || 0,
     })
   }
   return rows
+}
+
+function readCatalogRows(fileName: string): CatalogRow[] {
+  const file = catalogFile(fileName)
+  if (!file) return []
+  return parseProductCsv(readFileSync(file, 'utf8'))
 }
 
 const rowCache = new Map<string, CatalogRow[]>()
@@ -208,6 +216,7 @@ async function catalogRows(catalog: StarterCatalog): Promise<CatalogRow[]> {
         taxRate: product.taxType === 'non_gst' ? 0 : product.gstRate || 0,
         purchaseRate: product.purchaseRate || 0,
         sellingRate: product.sellingRate || 0,
+        openingStock: 0,
       })
     }
   } catch {
@@ -274,6 +283,75 @@ export async function importStarterCatalog(catalogId: string) {
     })
   } finally {
     stmt.free()
+  }
+  return { count: fresh.length, skipped: rows.length - fresh.length, name: catalog.name }
+}
+
+export async function importProductsCsv(companyCategoryId: string, csvText: string) {
+  const user = requirePermission('products.manage')
+  const catalog = COMPANY_CATEGORIES.find((item) => item.id === companyCategoryId || item.name === companyCategoryId)
+  if (!catalog) throw new AppError('Choose a company category.', 'VALIDATION')
+  const rows = parseProductCsv(csvText || '')
+  if (!rows.length) throw new AppError('The CSV has no products. The first row needs a name column.', 'VALIDATION')
+
+  const existing = queryAll<{ name: string; sku: string | null }>(
+    `SELECT name, sku FROM products WHERE company_id = ? AND status != 'deleted'`,
+    [user.companyId],
+  )
+  const have = new Set(existing.map((row) => `${row.name.trim().toLowerCase()}|${(row.sku || '').trim().toLowerCase()}`))
+  const fresh = rows.filter((row) => !have.has(`${row.name.toLowerCase()}|${row.sku.toLowerCase()}`))
+  if (!fresh.length) throw new AppError('Those products are already in this company.', 'NOT_FOUND')
+
+  const ts = new Date().toISOString()
+  const db = getDb()
+  const stmt = db.prepare(
+    `INSERT INTO products (
+      id, company_id, name, sku, barcode, hsn, category, company_category,
+      purchase_rate, selling_rate, tax_rate, opening_stock, current_stock, min_stock,
+      brand, mrp, reorder_level, location, description, supplier, product_type, unit,
+      status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, NULL, NULL, NULL, NULL, 'Pcs', 'active', ?, ?)`,
+  )
+  const movement = db.prepare(
+    `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, notes, created_by, created_at)
+     VALUES (?, ?, ?, 'opening', ?, 'product', 'Opening stock', ?, ?)`,
+  )
+  try {
+    withTransaction(() => {
+      for (const row of fresh) {
+        const id = generateId()
+        const stock = Number.isFinite(row.openingStock) ? row.openingStock : 0
+        stmt.run([
+          id,
+          user.companyId,
+          row.name,
+          row.sku || null,
+          row.barcode || null,
+          row.hsn || null,
+          row.category || null,
+          catalog.name,
+          row.purchaseRate,
+          row.sellingRate,
+          row.taxRate,
+          stock,
+          stock,
+          ts,
+          ts,
+        ])
+        if (stock !== 0) movement.run([generateId(), user.companyId, id, stock, user.id, ts])
+      }
+      writeAudit(
+        user.companyId,
+        user,
+        'product.imported',
+        'products',
+        null,
+        `Imported ${fresh.length} products from CSV into ${catalog.name}`,
+      )
+    })
+  } finally {
+    stmt.free()
+    movement.free()
   }
   return { count: fresh.length, skipped: rows.length - fresh.length, name: catalog.name }
 }

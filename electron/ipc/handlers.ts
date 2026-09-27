@@ -9,6 +9,7 @@ import * as operations from '../services/operations'
 import * as reports from '../services/reports'
 import * as backup from '../services/backup'
 import { closeDatabase, persistNow } from '../database'
+import * as appUpdate from '../services/appUpdate'
 
 type Handler = (payload: unknown, win: BrowserWindow | null) => unknown | Promise<unknown>
 
@@ -75,6 +76,9 @@ export function registerIpcHandlers(): void {
       auth.logout()
       return true
     },
+    [IpcChannels.APP_CHECK_UPDATE]: () => appUpdate.checkForAppUpdate(),
+    [IpcChannels.APP_INSTALL_UPDATE]: (_payload, win) =>
+      appUpdate.installAppUpdate((percent) => win?.webContents.send('app:update-progress', percent)),
     [IpcChannels.AUTH_HAS_COMPANY]: () => auth.hasAnyCompany(),
     [IpcChannels.AUTH_LOGIN]: async (payload) => {
       const { email, password } = payload as { email: string; password: string }
@@ -130,6 +134,10 @@ export function registerIpcHandlers(): void {
       starterCatalogs.previewStarterCatalog((payload as { catalogId: string; search?: string; page?: number; pageSize?: number }) || { catalogId: '' }),
     [IpcChannels.PRODUCTS_IMPORT_STARTER]: (payload) =>
       starterCatalogs.importStarterCatalog((payload as { catalogId: string }).catalogId),
+    [IpcChannels.PRODUCTS_IMPORT_CSV]: (payload) => {
+      const body = payload as { companyCategory: string; csvText: string }
+      return starterCatalogs.importProductsCsv(body.companyCategory, body.csvText)
+    },
     [IpcChannels.PRODUCTS_UPDATE]: (payload) => {
       const p = payload as { id: string } & Record<string, unknown>
       return catalog.updateProduct(p.id, p)

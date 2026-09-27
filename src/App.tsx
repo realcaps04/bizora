@@ -4,6 +4,7 @@ import { AppShell } from '@/layouts/AppShell'
 import { useAppStore } from '@/stores/app'
 import { Spinner } from '@/components/ui'
 import { BrandLogo } from '@/components/BrandLogo'
+import { UpdatePrompt } from '@/components/UpdatePrompt'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { LockScreen, OnboardingPage } from '@/pages/WelcomePage'
@@ -75,7 +76,9 @@ export default function App() {
   const home = authenticated && !locked ? '/sales/new' : '/login'
 
   return (
-    <Router>
+    <>
+      <UpdatePrompt />
+      <Router>
       <Routes>
         <Route path="/welcome" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={authenticated && !locked ? <ResumePage /> : <LoginPage />} />
@@ -117,5 +120,6 @@ export default function App() {
         <Route path="*" element={<Navigate to={home} replace />} />
       </Routes>
     </Router>
+    </>
   )
 }
