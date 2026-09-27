@@ -33,9 +33,9 @@ const schema = z
     companyEmail: z.string().optional(),
     gstin: z.string().optional(),
     address: z.string().optional(),
-    currency: z.string().default('INR'),
-    invoicePrefix: z.string().default('INV'),
-    taxMode: z.string().default('gst'),
+    currency: z.string().min(1),
+    invoicePrefix: z.string().min(1, 'Enter an invoice prefix'),
+    taxMode: z.string().min(1),
   })
   .refine((v) => v.password === v.confirmPassword, {
     message: 'Passwords do not match',

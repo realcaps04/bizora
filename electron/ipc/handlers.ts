@@ -164,7 +164,6 @@ export function registerIpcHandlers(): void {
       return true
     },
     [IpcChannels.QUOTATIONS_NEXT_NUMBER]: () => operations.nextQuotationNumber(),
-    [IpcChannels.QUOTATIONS_NEXT_NUMBER]: () => operations.nextQuotationNumber(),
     [IpcChannels.PURCHASES_LIST]: (payload) => operations.listPurchases((payload as object) || {}),
     [IpcChannels.PURCHASES_CREATE]: (payload) =>
       operations.createPurchase(payload as Parameters<typeof operations.createPurchase>[0]),

@@ -45,7 +45,6 @@ export const IpcChannels = {
   QUOTATIONS_CONVERT: 'quotations:convert',
   QUOTATIONS_DELETE: 'quotations:delete',
   QUOTATIONS_NEXT_NUMBER: 'quotations:next-number',
-  QUOTATIONS_NEXT_NUMBER: 'quotations:next-number',
   PURCHASES_LIST: 'purchases:list',
   PURCHASES_CREATE: 'purchases:create',
   PURCHASES_NEXT_NUMBER: 'purchases:next-number',
