@@ -11,6 +11,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { NewSalePage } from '@/pages/NewSalePage'
 import { CustomersPage, CustomerDetailPage } from '@/pages/CustomersPage'
 import { ProductsPage } from '@/pages/ProductsPage'
+import { AddProductPage } from '@/pages/AddProductPage'
 import { SalesPage, InvoicesPage, InvoiceDetailPage } from '@/pages/InvoicesPage'
 import { NewPurchasePage } from '@/pages/NewPurchasePage'
 import { NewQuotationPage } from '@/pages/NewQuotationPage'
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/quotations" element={<QuotationsPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:id" element={<CustomerDetailRoute />} />
+          <Route path="/products/new" element={<AddProductPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/purchases/new" element={<NewPurchasePage />} />
           <Route path="/purchases" element={<PurchasesPage />} />

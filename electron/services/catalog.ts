@@ -208,32 +208,50 @@ export function createProduct(input: {
   taxRate?: number
   openingStock?: number
   minStock?: number
+  brand?: string
+  mrp?: number
+  reorderLevel?: number
+  location?: string
+  description?: string
+  supplier?: string
+  productType?: string
+  status?: string
 }) {
   const user = requirePermission('products.manage')
   const id = generateId()
   const ts = now()
   const stock = input.openingStock ?? 0
+  const status = input.status === 'inactive' ? 'inactive' : 'active'
   withTransaction(() => {
     run(
       `INSERT INTO products (
         id, company_id, name, sku, barcode, hsn, category,
         purchase_rate, selling_rate, tax_rate, opening_stock, current_stock, min_stock,
+        brand, mrp, reorder_level, location, description, supplier, product_type,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         user.companyId,
         input.name.trim(),
-        input.sku ?? null,
-        input.barcode ?? null,
-        input.hsn ?? null,
-        input.category ?? null,
+        input.sku?.trim() || null,
+        input.barcode?.trim() || null,
+        input.hsn?.trim() || null,
+        input.category?.trim() || null,
         input.purchaseRate ?? 0,
         input.sellingRate ?? 0,
         input.taxRate ?? 0,
         stock,
         stock,
         input.minStock ?? 0,
+        input.brand?.trim() || null,
+        input.mrp ?? 0,
+        input.reorderLevel ?? 0,
+        input.location?.trim() || null,
+        input.description?.trim() || null,
+        input.supplier?.trim() || null,
+        input.productType?.trim() || null,
+        status,
         ts,
         ts,
       ],

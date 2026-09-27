@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Mail, X } from 'lucide-react'
 import { BizoraLogo } from './BizoraLogo'
 import { TextInput } from './TextInput'
@@ -6,7 +6,7 @@ import { PasswordInput } from './PasswordInput'
 import { RememberDevice } from './RememberDevice'
 import { CreateCompanyButton, PrimaryButton } from './Buttons'
 import { Button, Modal } from '@/components/ui'
-import { callApi } from '@/utils'
+import { callApi, cn } from '@/utils'
 
 const SUPPORT_EMAIL = 'consoleprojectsonline@gmail.com'
 
@@ -262,6 +262,95 @@ function LoginIssueModal({
   )
 }
 
+function ResetSteps({ current }: { current: 'email' | 'code' | 'done' }) {
+  const steps = [
+    { id: 'email', label: 'Request code' },
+    { id: 'code', label: 'Enter code' },
+    { id: 'done', label: 'New password' },
+  ] as const
+  const active = steps.findIndex((step) => step.id === current)
+
+  return (
+    <ol className="mb-4 flex items-center gap-2">
+      {steps.map((step, index) => (
+        <li key={step.id} className="flex items-center gap-2">
+          <span
+            className={cn(
+              'flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold',
+              index <= active ? 'bg-brand text-white' : 'bg-[#E8EEF6] text-[#62789A]',
+            )}
+          >
+            {index + 1}
+          </span>
+          <span className={cn('text-[12px]', index <= active ? 'font-medium text-ink' : 'text-[#62789A]')}>
+            {step.label}
+          </span>
+          {index < steps.length - 1 ? <span className="h-px w-5 bg-[#D8E4F2]" /> : null}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function CodeBoxes({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string
+  onChange: (next: string) => void
+  disabled?: boolean
+}) {
+  const refs = useRef<Array<HTMLInputElement | null>>([])
+  const digits = Array.from({ length: 6 }, (_, index) => value[index] ?? '')
+
+  function write(index: number, char: string) {
+    const next = digits.slice()
+    next[index] = char
+    onChange(next.join('').replace(/\D/g, '').slice(0, 6))
+  }
+
+  return (
+    <div className="flex justify-between gap-2">
+      {digits.map((digit, index) => (
+        <input
+          key={index}
+          ref={(node) => {
+            refs.current[index] = node
+          }}
+          inputMode="numeric"
+          autoComplete={index === 0 ? 'one-time-code' : 'off'}
+          maxLength={1}
+          disabled={disabled}
+          autoFocus={index === 0}
+          aria-label={`Digit ${index + 1}`}
+          className="h-12 w-full rounded-[10px] border border-[#D8E4F2] bg-white text-center text-[20px] font-semibold text-[#031C45] outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 disabled:bg-[#F4F7FB]"
+          value={digit}
+          onChange={(event) => {
+            const char = event.target.value.replace(/\D/g, '').slice(-1)
+            write(index, char)
+            if (char && index < 5) refs.current[index + 1]?.focus()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Backspace' && !digits[index] && index > 0) {
+              refs.current[index - 1]?.focus()
+            }
+            if (event.key === 'ArrowLeft' && index > 0) refs.current[index - 1]?.focus()
+            if (event.key === 'ArrowRight' && index < 5) refs.current[index + 1]?.focus()
+          }}
+          onPaste={(event) => {
+            const text = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+            if (!text) return
+            event.preventDefault()
+            onChange(text)
+            refs.current[Math.min(text.length, 5)]?.focus()
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 function ForgotPasswordModal({
   open,
   onClose,
@@ -307,6 +396,7 @@ function ForgotPasswordModal({
     setFormError(null)
     try {
       await callApi(() => window.bizora.requestPasswordReset(address))
+      setCode('')
       setStep('code')
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Unable to send the reset code')
@@ -340,10 +430,12 @@ function ForgotPasswordModal({
     }
   }
 
+  const title = step === 'done' ? 'Password updated' : step === 'code' ? 'Enter your reset code' : 'Request a reset code'
+
   return (
     <Modal
       open={open}
-      title="Forgot password"
+      title={title}
       onClose={resetAndClose}
       footer={
         <>
@@ -358,73 +450,102 @@ function ForgotPasswordModal({
             </Button>
           ) : step === 'email' ? (
             <Button type="button" onClick={() => void sendCode()} disabled={busy}>
-              {busy ? 'Sending…' : 'Send code'}
+              {busy ? 'Checking account…' : 'Send reset code'}
             </Button>
           ) : (
             <Button type="button" onClick={() => void savePassword()} disabled={busy}>
-              {busy ? 'Saving…' : 'Update password'}
+              {busy ? 'Updating…' : 'Update password'}
             </Button>
           )}
         </>
       }
     >
+      <ResetSteps current={step} />
       {step === 'done' ? (
-        <p className="text-[13px] leading-relaxed text-ink-muted">
-          Password updated. Sign in with the new password for{' '}
-          <span className="font-medium text-ink">{contactEmail.trim()}</span>.
-        </p>
+        <div className="rounded-[12px] border border-[#D8E4F2] bg-[#F7FAFD] px-4 py-4">
+          <p className="text-[14px] font-medium text-[#031C45]">You can sign in with the new password.</p>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
+            The password for <span className="font-medium text-ink">{contactEmail.trim()}</span> is saved. The reset
+            code is no longer valid.
+          </p>
+        </div>
       ) : step === 'email' ? (
         <>
           <p className="text-[13px] leading-relaxed text-ink-muted">
-            Enter the email on your Bizora account. If it is registered, a 6-digit code is sent to that inbox.
+            Enter the email on your Bizora account. We check that it is a registered account, then email a 6-digit
+            code. The code expires in 15 minutes.
           </p>
           <div className="mt-4">
             <label className="mb-1 block text-[12px] font-medium text-ink-muted">Account email</label>
             <input
               type="email"
               autoFocus
-              className="h-9 w-full rounded-md border border-border-strong bg-white px-2.5 text-[13px] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+              className="h-10 w-full rounded-[10px] border border-[#D8E4F2] bg-white px-3 text-[13px] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
               value={contactEmail}
               onChange={(e) => setContactEmail(e.target.value)}
               placeholder="you@example.com"
             />
           </div>
+          <ul className="mt-4 space-y-2 rounded-[12px] border border-[#D8E4F2] bg-[#F7FAFD] px-3 py-3 text-[12px] leading-relaxed text-[#62789A]">
+            <li>Only an active account created in Bizora can receive a code.</li>
+            <li>The code is sent to that inbox. It is not shown on this screen.</li>
+            <li>After the code arrives, you choose a new password of at least 8 characters.</li>
+          </ul>
         </>
       ) : (
         <>
           <p className="text-[13px] leading-relaxed text-ink-muted">
-            Enter the code sent to <span className="font-medium text-ink">{contactEmail.trim()}</span> and choose a new password.
+            We sent a 6-digit code to <span className="font-medium text-ink">{contactEmail.trim()}</span>. Enter it
+            below, then choose a new password. The code expires in 15 minutes.
           </p>
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className="mb-1 block text-[12px] font-medium text-ink-muted">Reset code</label>
-              <input
-                inputMode="numeric"
-                maxLength={6}
-                autoFocus
-                className="h-9 w-full rounded-md border border-border-strong bg-white px-2.5 text-[13px] tracking-[0.2em] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="6-digit code"
-              />
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-[12px] font-medium text-ink-muted">Reset code</label>
+              <button
+                type="button"
+                className="text-[12px] font-medium text-brand hover:underline disabled:opacity-60"
+                disabled={busy}
+                onClick={() => void sendCode()}
+              >
+                Resend code
+              </button>
             </div>
-            <div>
-              <label className="mb-1 block text-[12px] font-medium text-ink-muted">New password</label>
-              <input
-                type="password"
-                className="h-9 w-full rounded-md border border-border-strong bg-white px-2.5 text-[13px] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
-                value={nextPassword}
-                onChange={(e) => setNextPassword(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-[12px] font-medium text-ink-muted">Confirm password</label>
-              <input
-                type="password"
-                className="h-9 w-full rounded-md border border-border-strong bg-white px-2.5 text-[13px] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+            <CodeBoxes value={code} onChange={setCode} disabled={busy} />
+            <button
+              type="button"
+              className="mt-2 text-[12px] text-[#62789A] hover:text-ink"
+              onClick={() => {
+                setStep('email')
+                setCode('')
+                setFormError(null)
+              }}
+            >
+              Use a different email
+            </button>
+          </div>
+          <div className="mt-5 border-t border-[#D8E4F2] pt-4">
+            <p className="text-[13px] font-medium text-[#031C45]">Choose a new password</p>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-ink-muted">New password</label>
+                <input
+                  type="password"
+                  className="h-10 w-full rounded-[10px] border border-[#D8E4F2] bg-white px-3 text-[13px] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                  value={nextPassword}
+                  onChange={(e) => setNextPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-ink-muted">Confirm password</label>
+                <input
+                  type="password"
+                  className="h-10 w-full rounded-[10px] border border-[#D8E4F2] bg-white px-3 text-[13px] text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat the new password"
+                />
+              </div>
             </div>
           </div>
         </>

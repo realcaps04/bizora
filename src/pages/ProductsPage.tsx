@@ -1,30 +1,20 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner } from '@/components/ui'
-import { useAppStore } from '@/stores/app'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Badge, Button, EmptyState, Input, PageHeader, Spinner } from '@/components/ui'
 import { callApi, formatMoney, statusTone } from '@/utils'
 import type { Product } from '@/types'
 
 export function ProductsPage() {
-  const { showToast } = useAppStore()
-  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
   const [rows, setRows] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [lowStock, setLowStock] = useState(false)
-  const [open, setOpen] = useState(params.get('new') === '1')
-  const [form, setForm] = useState({
-    name: '',
-    sku: '',
-    barcode: '',
-    hsn: '',
-    category: '',
-    purchaseRate: 0,
-    sellingRate: 0,
-    taxRate: 18,
-    openingStock: 0,
-    minStock: 0,
-  })
+
+  useEffect(() => {
+    if (params.get('new') === '1') navigate('/products/new', { replace: true })
+  }, [params, navigate])
 
   async function load() {
     setLoading(true)
@@ -40,24 +30,16 @@ export function ProductsPage() {
     void load()
   }, [search, lowStock])
 
-  async function save() {
-    try {
-      await callApi(() => window.bizora.createProduct(form))
-      showToast('Product added', 'success')
-      setOpen(false)
-      setParams({})
-      await load()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Unable to save product', 'error')
-    }
-  }
-
   return (
     <div>
       <PageHeader
         title="Products"
         subtitle="Inventory and pricing"
-        actions={<Button onClick={() => setOpen(true)}>Add Product</Button>}
+        actions={
+          <Link to="/products/new">
+            <Button>Add Product</Button>
+          </Link>
+        }
       />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <Input className="max-w-sm" placeholder="Search products…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -69,7 +51,15 @@ export function ProductsPage() {
       {loading ? (
         <Spinner />
       ) : rows.length === 0 ? (
-        <EmptyState title="No products yet" description="Add products to start creating invoices." action={<Button onClick={() => setOpen(true)}>Add Product</Button>} />
+        <EmptyState
+          title="No products yet"
+          description="Add products to start creating invoices."
+          action={
+            <Link to="/products/new">
+              <Button>Add Product</Button>
+            </Link>
+          }
+        />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-white">
           <table className="w-full text-left text-sm">
@@ -104,65 +94,6 @@ export function ProductsPage() {
           </table>
         </div>
       )}
-
-      <Modal
-        open={open}
-        title="Add Product"
-        wide
-        onClose={() => {
-          setOpen(false)
-          setParams({})
-        }}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void save()} disabled={!form.name.trim()}>
-              Save Product
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Product Name" className="sm:col-span-3">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </Field>
-          <Field label="SKU">
-            <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-          </Field>
-          <Field label="Barcode">
-            <Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} />
-          </Field>
-          <Field label="HSN">
-            <Input value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} />
-          </Field>
-          <Field label="Category">
-            <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-          </Field>
-          <Field label="Purchase Rate">
-            <Input type="number" value={form.purchaseRate} onChange={(e) => setForm({ ...form, purchaseRate: Number(e.target.value) })} />
-          </Field>
-          <Field label="Selling Rate">
-            <Input type="number" value={form.sellingRate} onChange={(e) => setForm({ ...form, sellingRate: Number(e.target.value) })} />
-          </Field>
-          <Field label="Tax Rate %">
-            <Select value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: Number(e.target.value) })}>
-              {[0, 5, 12, 18, 28].map((t) => (
-                <option key={t} value={t}>
-                  {t}%
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Opening Stock">
-            <Input type="number" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: Number(e.target.value) })} />
-          </Field>
-          <Field label="Minimum Stock">
-            <Input type="number" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: Number(e.target.value) })} />
-          </Field>
-        </div>
-      </Modal>
     </div>
   )
 }

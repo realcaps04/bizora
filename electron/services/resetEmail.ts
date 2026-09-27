@@ -24,8 +24,11 @@ export async function sendPasswordResetEmail(input: { toEmail: string; toName: s
       accessToken: privateKey || undefined,
       template_params: {
         to_email: input.toEmail,
+        email: input.toEmail,
         to_name: input.toName || 'there',
+        name: input.toName || 'there',
         reset_code: input.code,
+        code: input.code,
       },
     }),
   })

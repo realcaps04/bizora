@@ -85,6 +85,12 @@ export interface CloudAccount {
   directoryIssued: boolean
 }
 
+export async function findCloudResetTarget(email: string): Promise<{ name: string; accountEmail: string } | null> {
+  return callConvex<{ name: string; accountEmail: string } | null>('query', 'accounts:lookupResetTarget', {
+    email: email.trim().toLowerCase(),
+  })
+}
+
 export async function findCloudAccount(email: string): Promise<CloudAccount | null> {
   return callConvex<CloudAccount | null>('query', 'accounts:findByEmail', {
     email: email.trim().toLowerCase(),
@@ -111,8 +117,12 @@ export async function clearCloudPasswordReset(email: string): Promise<void> {
   })
 }
 
-export async function completeCloudPasswordReset(email: string, codeHash: string, passwordHash: string): Promise<void> {
-  await callConvex('mutation', 'accounts:completePasswordReset', {
+export async function completeCloudPasswordReset(
+  email: string,
+  codeHash: string,
+  passwordHash: string,
+): Promise<{ accountEmail: string }> {
+  return callConvex<{ accountEmail: string }>('mutation', 'accounts:completePasswordReset', {
     email: email.trim().toLowerCase(),
     codeHash,
     passwordHash,

@@ -53,12 +53,31 @@ export async function initDatabase(): Promise<void> {
   }
 
   db.run(SCHEMA_SQL)
+  ensureProductColumns()
   const version = getMeta('schema_version')
   if (!version) {
     setMeta('schema_version', SCHEMA_VERSION)
     setMeta('created_at', new Date().toISOString())
   }
   persistNow()
+}
+
+const PRODUCT_EXTRA_COLUMNS: Array<[string, string]> = [
+  ['brand', 'TEXT'],
+  ['mrp', 'REAL NOT NULL DEFAULT 0'],
+  ['reorder_level', 'REAL NOT NULL DEFAULT 0'],
+  ['location', 'TEXT'],
+  ['description', 'TEXT'],
+  ['supplier', 'TEXT'],
+  ['product_type', 'TEXT'],
+]
+
+function ensureProductColumns(): void {
+  const cols = queryAll<{ name: string }>('PRAGMA table_info(products)')
+  const have = new Set(cols.map((col) => col.name))
+  for (const [name, ddl] of PRODUCT_EXTRA_COLUMNS) {
+    if (!have.has(name)) run(`ALTER TABLE products ADD COLUMN ${name} ${ddl}`)
+  }
 }
 
 export function getDb(): Database {

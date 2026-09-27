@@ -79,7 +79,14 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     // New Sales always starts with the sidebar collapsed
     const path = window.location.hash.replace(/^#/, '') || window.location.pathname
-    if (path.startsWith('/sales/new') || path.startsWith('/purchases/new') || path.startsWith('/quotations/new')) return false
+    if (
+      path.startsWith('/sales/new') ||
+      path.startsWith('/purchases/new') ||
+      path.startsWith('/quotations/new') ||
+      path.startsWith('/products/new')
+    ) {
+      return false
+    }
     const saved = localStorage.getItem(SIDEBAR_KEY)
     if (saved === null) return false
     return saved === 'true'
@@ -94,7 +101,9 @@ export function AppShell() {
         ? '/purchases/new'
         : location.pathname === '/quotations/new'
           ? '/quotations/new'
-          : null
+          : location.pathname === '/products/new'
+            ? '/products/new'
+            : null
 
   useEffect(() => {
     if (!composeRouteKey) {

@@ -18,6 +18,7 @@ import {
   clearCloudPasswordReset,
   completeCloudPasswordReset,
   findCloudAccount,
+  findCloudResetTarget,
   isAccountCloudEnabled,
   issueCloudAccount,
   recordCloudLogin,
@@ -77,37 +78,6 @@ export function hasAnyCompany(): boolean {
   return (row?.c ?? 0) > 0
 }
 
-/** Drop a local company created before accounts were issued in Convex. */
-function clearPreConvexWorkspace(): void {
-  withTransaction(() => {
-    run('DELETE FROM payments')
-    run('DELETE FROM invoice_items')
-    run('DELETE FROM invoices')
-    run('DELETE FROM quotation_items')
-    run('DELETE FROM quotations')
-    run('DELETE FROM purchase_items')
-    run('DELETE FROM purchases')
-    run('DELETE FROM stock_movements')
-    run('DELETE FROM expenses')
-    run('DELETE FROM audit_logs')
-    run('DELETE FROM settings')
-    run('DELETE FROM products')
-    run('DELETE FROM customers')
-    run('DELETE FROM users')
-    run('DELETE FROM companies')
-  })
-  clearSession()
-}
-
-async function localWorkspaceIsIssued(): Promise<boolean> {
-  const users = queryAll<{ email: string }>('SELECT email FROM users')
-  for (const user of users) {
-    const cloud = await findCloudAccount(user.email)
-    if (cloud?.directoryIssued && cloud.isActive) return true
-  }
-  return false
-}
-
 export async function registerCompany(input: {
   ownerName: string
   email: string
@@ -123,20 +93,9 @@ export async function registerCompany(input: {
   taxMode?: string
 }): Promise<SessionUser> {
   const email = input.email.trim().toLowerCase()
-  if (hasAnyCompany()) {
-    if (!isAccountCloudEnabled()) {
-      throw new AppError('A company workspace already exists on this device. Sign in to continue.', 'COMPANY_EXISTS')
-    }
-    try {
-      const issued = await localWorkspaceIsIssued()
-      if (issued) {
-        throw new AppError('A company workspace already exists on this device. Sign in to continue.', 'COMPANY_EXISTS')
-      }
-    } catch (err) {
-      if (err instanceof AppError) throw err
-      throw new AppError('Could not reach the account directory. Check your connection and try again.', 'CLOUD_UNAVAILABLE')
-    }
-    clearPreConvexWorkspace()
+  const localExisting = queryOne('SELECT id FROM users WHERE lower(email) = ?', [email])
+  if (localExisting) {
+    throw new AppError('An account with this email already exists. Sign in to continue.', 'DUPLICATE')
   }
 
   if (isAccountCloudEnabled()) {
@@ -255,10 +214,27 @@ export async function requestPasswordReset(emailRaw: string): Promise<void> {
     throw new AppError('Account directory is not configured.', 'CLOUD_UNAVAILABLE')
   }
 
-  const cloud = await findCloudAccount(email).catch(() => {
+  let target = await findCloudResetTarget(email).catch(() => {
     throw new AppError('Could not reach the account directory. Check your connection and try again.', 'CLOUD_UNAVAILABLE')
   })
-  if (!cloud || !cloud.directoryIssued || !cloud.isActive) {
+  if (!target) {
+    const localUser = queryOne<{ company_id: string; is_active: number }>(
+      'SELECT company_id, is_active FROM users WHERE lower(email) = ?',
+      [email],
+    )
+    const localCompany = queryOne<{ id: string }>('SELECT id FROM companies WHERE lower(email) = ?', [email])
+    const companyId =
+      localUser && Number(localUser.is_active) === 1 ? localUser.company_id : localCompany?.id
+    if (companyId) {
+      try {
+        await syncCompanyAccounts(companyId)
+        target = await findCloudResetTarget(email)
+      } catch {
+        throw new AppError('Could not reach the account directory. Check your connection and try again.', 'CLOUD_UNAVAILABLE')
+      }
+    }
+  }
+  if (!target) {
     throw new AppError('No registered account uses this email.', 'NOT_FOUND')
   }
 
@@ -275,12 +251,24 @@ export async function requestPasswordReset(emailRaw: string): Promise<void> {
   }
 
   try {
-    await sendPasswordResetEmail({ toEmail: email, toName: cloud.name, code })
+    await sendPasswordResetEmail({ toEmail: email, toName: target.name, code })
   } catch (err) {
     await clearCloudPasswordReset(email).catch(() => undefined)
     const message = err instanceof Error ? err.message : ''
     if (message.includes('not configured')) {
       throw new AppError('EmailJS is not configured. Add the service, template, and public key, then try again.', 'EMAIL_FAILED')
+    }
+    if (message.includes('non-browser')) {
+      throw new AppError(
+        'EmailJS is blocking this send. In the EmailJS dashboard, open Account, Security, and allow API requests from non-browser applications.',
+        'EMAIL_FAILED',
+      )
+    }
+    if (message.toLowerCase().includes('recipients address is empty')) {
+      throw new AppError(
+        'The EmailJS template has no recipient. Open the template, set To Email to {{to_email}}, and save it.',
+        'EMAIL_FAILED',
+      )
     }
     throw new AppError('Could not send the reset email. Check the EmailJS settings and try again.', 'EMAIL_FAILED')
   }
@@ -296,8 +284,10 @@ export async function completePasswordReset(emailRaw: string, code: string, newP
   }
 
   const passwordHash = await hashPassword(newPassword)
+  let accountEmail = email
   try {
-    await completeCloudPasswordReset(email, resetCodeHash(code), passwordHash)
+    const saved = await completeCloudPasswordReset(email, resetCodeHash(code), passwordHash)
+    accountEmail = saved?.accountEmail || email
   } catch (err) {
     const message = err instanceof Error ? err.message : ''
     if (message.includes('not valid') || message.includes('Password could not')) {
@@ -306,7 +296,11 @@ export async function completePasswordReset(emailRaw: string, code: string, newP
     throw new AppError('Could not reach the account directory. Check your connection and try again.', 'CLOUD_UNAVAILABLE')
   }
 
-  const local = queryOne<{ id: string; company_id: string }>('SELECT id, company_id FROM users WHERE lower(email) = ?', [email])
+  const local =
+    queryOne<{ id: string; company_id: string }>('SELECT id, company_id FROM users WHERE lower(email) = ?', [accountEmail]) ||
+    (accountEmail === email
+      ? undefined
+      : queryOne<{ id: string; company_id: string }>('SELECT id, company_id FROM users WHERE lower(email) = ?', [email]))
   if (local) {
     run('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND company_id = ?', [
       passwordHash,
@@ -494,7 +488,7 @@ export async function createStaff(input: {
   if (input.password.trim().length < 8) {
     throw new AppError('Password must be at least 8 characters.', 'WEAK_PASSWORD')
   }
-  const existing = queryOne('SELECT id FROM users WHERE company_id = ? AND lower(email) = ?', [actor.companyId, email])
+  const existing = queryOne('SELECT id FROM users WHERE lower(email) = ?', [email])
   if (existing) throw new AppError('A user with this email already exists.', 'DUPLICATE')
   if (isAccountCloudEnabled()) {
     try {
