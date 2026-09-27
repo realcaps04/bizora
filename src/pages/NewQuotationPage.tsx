@@ -9,7 +9,6 @@ import {
   Search,
   Settings,
   Trash2,
-  UserRound,
 } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
@@ -85,8 +84,6 @@ export function NewQuotationPage() {
   const { showToast } = useAppStore()
   const productSearchRef = useRef<HTMLInputElement>(null)
   const productAnchor = useRef<HTMLElement | null>(null)
-  const customerInputRef = useRef<HTMLInputElement>(null)
-  const [customerCollapsed, setCustomerCollapsed] = useState(false)
   const [productMenu, setProductMenu] = useState<{ top: number; left: number; width: number } | null>(null)
 
   function placeProductMenu(el?: HTMLElement | null) {
@@ -230,7 +227,6 @@ export function NewQuotationPage() {
     setPlace(parsed.place)
     setGstin(c.gstin || '')
     setCustomerOpen(false)
-    setCustomerCollapsed(true)
   }
 
   function clearCustomer() {
@@ -239,7 +235,6 @@ export function NewQuotationPage() {
     setHouseName('')
     setPlace('')
     setGstin('')
-    setCustomerCollapsed(false)
   }
 
   function updateItem(key: string, patch: Partial<LineItem>) {
@@ -474,20 +469,7 @@ export function NewQuotationPage() {
         </div>
 
         {/* Customer + additional */}
-        <div className={customerCollapsed && customerQuery.trim() ? 'flex items-start gap-4' : 'grid gap-4 lg:grid-cols-2'}>
-          {customerCollapsed && customerQuery.trim() ? (
-            <button
-              type="button"
-              title={customerQuery}
-              onClick={() => {
-                setCustomerCollapsed(false)
-                setTimeout(() => customerInputRef.current?.focus(), 0)
-              }}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D8E4F2] bg-white text-[#0878F9] shadow-[0_2px_10px_rgba(6,41,92,0.03)] hover:bg-[#F5F9FF]"
-            >
-              <UserRound size={18} />
-            </button>
-          ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
           <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
             <h2 className="mb-3 text-[14px] font-semibold text-[#031C45]">Customer Details</h2>
             <div className="space-y-3">
@@ -500,7 +482,6 @@ export function NewQuotationPage() {
                       className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
                     />
                     <input
-                      ref={customerInputRef}
                       value={customerQuery}
                       onChange={(e) => {
                         setCustomerQuery(e.target.value)
@@ -508,12 +489,8 @@ export function NewQuotationPage() {
                         if (!e.target.value) clearCustomer()
                       }}
                       onFocus={() => setCustomerOpen(true)}
-                      onBlur={(e) => {
-                        const value = e.currentTarget.value
-                        setTimeout(() => {
-                          setCustomerOpen(false)
-                          if (value.trim()) setCustomerCollapsed(true)
-                        }, 150)
+                      onBlur={() => {
+                        setTimeout(() => setCustomerOpen(false), 150)
                       }}
                       placeholder="Search customer by name, phone or code"
                       className="h-9 w-full rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] text-[#031C45] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
@@ -564,9 +541,8 @@ export function NewQuotationPage() {
               </div>
             </div>
           </section>
-          )}
 
-          <section className={`rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)] ${customerCollapsed && customerQuery.trim() ? 'min-w-0 flex-1' : ''}`}>
+          <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
             <h2 className="mb-3 text-[14px] font-semibold text-[#031C45]">Additional Details</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="GSTIN">
