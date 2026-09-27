@@ -18,6 +18,7 @@ const CATALOG_FILES: Record<string, string> = {
   supermarkets: 'supermarket_pos_inventory_data-v2.csv',
   pharmacies: 'pharmacy_pos_inventory_data.csv',
   apparel: 'apparel_boutique_pos_inventory.csv',
+  'agro-hardware': 'agro_hardware_pos_inventory.csv',
   'specialty-manufacturing': 'specialty_manufacturing_pos_inventory.csv',
   'heavy-manufacturing': 'heavy_manufacturing_pos_inventory.csv',
   restaurants: 'restaurant_food_service_pos_inventory.csv',

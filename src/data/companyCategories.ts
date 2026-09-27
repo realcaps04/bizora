@@ -22,6 +22,11 @@ export const COMPANY_CATEGORIES: CompanyCategory[] = [
     description: 'Retailers specializing in fashion, footwear, and accessories.',
   },
   {
+    id: 'agro-hardware',
+    name: 'Agro and Hardware Stores',
+    description: 'Shops selling farm tools, pumps, plumbing fittings, fencing, and general agro-hardware.',
+  },
+  {
     id: 'specialty-manufacturing',
     name: 'Specialty Manufacturing',
     description: 'Factories producing specific physical goods, such as fibre door manufacturers, custom glass blowers, or specialized metal fabricators.',

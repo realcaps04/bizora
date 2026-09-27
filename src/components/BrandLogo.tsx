@@ -1,7 +1,10 @@
 import { cn } from '@/utils'
 
-/** Transparent PNG from public/ — logo only, no extra background */
-export const LOGO_SRC = '/Bizora_applogo.png'
+/**
+ * public/Bizora_applogo.png. BASE_URL is "/" in dev and "./" in the packaged app,
+ * so the file resolves next to index.html instead of the drive root.
+ */
+export const LOGO_SRC = `${import.meta.env.BASE_URL}Bizora_applogo.png`
 
 export function BrandLogo({
   className,
