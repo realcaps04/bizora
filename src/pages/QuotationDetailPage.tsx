@@ -128,6 +128,7 @@ export function QuotationDetailPage() {
           accountNumber: settings.bank_account_number,
           ifsc: settings.bank_ifsc,
           bankName: settings.bank_name,
+          upiId: settings.upi_id,
         }}
       />
     </div>

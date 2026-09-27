@@ -20,7 +20,6 @@ import { QuotationDetailPage } from '@/pages/QuotationDetailPage'
 import { QuotationsPage, PurchasesPage, ExpensesPage, PaymentsPage } from '@/pages/OperationsPages'
 import {
   ReportsPage,
-  BackupPage,
   SettingsPage,
   StaffPage,
   RestorePage,
@@ -112,7 +111,6 @@ export default function App() {
           <Route path="/payments" element={<PaymentsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/staff" element={<StaffPage />} />
-          <Route path="/backup" element={<BackupPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 

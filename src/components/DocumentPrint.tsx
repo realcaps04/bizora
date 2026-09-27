@@ -1,4 +1,5 @@
 import { amountInWords, cn, formatDate, formatMoney } from '@/utils'
+import { UpiQr, isUpiId } from '@/components/UpiQr'
 
 export interface PrintLineItem {
   id?: string
@@ -24,6 +25,7 @@ export interface PrintBank {
   accountNumber?: string
   ifsc?: string
   bankName?: string
+  upiId?: string
 }
 
 export interface DocumentPrintProps {
@@ -152,11 +154,14 @@ export function DocumentPrint({
       ? DEFAULT_INVOICE_TERMS
       : DEFAULT_QUOTATION_TERMS
   const noteText = (notes || '').trim() || 'Thank you for your business'
+  const upiId = bank?.upiId?.trim() || ''
+  const upiAmount = balanceDue > 0 ? balanceDue : grandTotal
   const hasBank =
     Boolean(bank?.accountName) ||
     Boolean(bank?.accountNumber) ||
     Boolean(bank?.ifsc) ||
-    Boolean(bank?.bankName)
+    Boolean(bank?.bankName) ||
+    isUpiId(upiId)
 
   return (
     <div
@@ -353,11 +358,20 @@ export function DocumentPrint({
         <div className="border-r border-[#C9D4E2] px-3 py-2.5">
           <div className="text-[11px] font-semibold text-[#0F2744]">Bank Details</div>
           {hasBank ? (
-            <div className="mt-1 space-y-0.5 text-[11px] text-[#4A5D78]">
-              {bank?.accountName ? <div>Account Name: {bank.accountName}</div> : null}
-              {bank?.accountNumber ? <div>Account Number: {bank.accountNumber}</div> : null}
-              {bank?.ifsc ? <div>IFSC Code: {bank.ifsc}</div> : null}
-              {bank?.bankName ? <div>Bank Name: {bank.bankName}</div> : null}
+            <div className="mt-1 flex items-start gap-3">
+              <div className="space-y-0.5 text-[11px] text-[#4A5D78]">
+                {bank?.accountName ? <div>Account Name: {bank.accountName}</div> : null}
+                {bank?.accountNumber ? <div>Account Number: {bank.accountNumber}</div> : null}
+                {bank?.ifsc ? <div>IFSC Code: {bank.ifsc}</div> : null}
+                {bank?.bankName ? <div>Bank Name: {bank.bankName}</div> : null}
+                {isUpiId(upiId) ? <div>UPI ID: {upiId}</div> : null}
+              </div>
+              {isUpiId(upiId) ? (
+                <div className="ml-auto shrink-0 text-center">
+                  <UpiQr upiId={upiId} payeeName={companyName} amount={upiAmount} note={documentNumber} size={88} />
+                  <div className="mt-0.5 text-[10px] text-[#4A5D78]">Scan to pay</div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="mt-1 text-[11px] text-[#6B7C93]">Add bank details in Settings</div>

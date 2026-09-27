@@ -11,7 +11,6 @@ import {
   CreditCard,
   BarChart3,
   UserCog,
-  HardDrive,
   Settings,
   Lock,
   LogOut,
@@ -66,7 +65,6 @@ const primaryNav: NavItem[] = [
 
 const secondaryNav: NavItem[] = [
   { to: '/staff', label: 'Staff', icon: UserCog },
-  { to: '/backup', label: 'Backup', icon: HardDrive },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -156,13 +154,9 @@ export function AppShell() {
         e.preventDefault()
         void lockApp()
       }
-      if (e.ctrlKey && e.key.toLowerCase() === 'b') {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'b') {
         e.preventDefault()
-        if (e.shiftKey) {
-          toggleSidebar()
-        } else {
-          navigate('/backup')
-        }
+        toggleSidebar()
       }
     }
     window.addEventListener('keydown', onKey)

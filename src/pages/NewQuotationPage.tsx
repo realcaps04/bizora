@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   Calendar,
@@ -8,6 +9,7 @@ import {
   Search,
   Settings,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
@@ -82,6 +84,19 @@ export function NewQuotationPage() {
   const navigate = useNavigate()
   const { showToast } = useAppStore()
   const productSearchRef = useRef<HTMLInputElement>(null)
+  const productAnchor = useRef<HTMLElement | null>(null)
+  const customerInputRef = useRef<HTMLInputElement>(null)
+  const [customerCollapsed, setCustomerCollapsed] = useState(false)
+  const [productMenu, setProductMenu] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  function placeProductMenu(el?: HTMLElement | null) {
+    const node = el ?? productAnchor.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    const width = Math.min(640, Math.max(rect.width, 560))
+    const left = Math.min(rect.left, window.innerWidth - width - 8)
+    setProductMenu({ top: rect.bottom + 4, left: Math.max(8, left), width })
+  }
 
   const [quotationNumber, setQuotationNumber] = useState('…')
   const [quotationDate, setQuotationDate] = useState(todayIso)
@@ -165,6 +180,24 @@ export function NewQuotationPage() {
     return () => clearTimeout(t)
   }, [productQuery])
 
+  useEffect(() => {
+    const showRow = Boolean(activeRowKey && productResults.length > 0)
+    const showSearch = Boolean(!activeRowKey && productQuery.trim() && productResults.length > 0)
+    if (!showRow && !showSearch) {
+      setProductMenu(null)
+      return
+    }
+    const node = showRow ? productAnchor.current : productSearchRef.current
+    placeProductMenu(node)
+    const onMove = () => placeProductMenu(showRow ? productAnchor.current : productSearchRef.current)
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  }, [activeRowKey, productResults, productQuery])
+
   const filledItems = useMemo(
     () => items.filter((i) => i.productName.trim() && i.qty > 0),
     [items],
@@ -197,6 +230,7 @@ export function NewQuotationPage() {
     setPlace(parsed.place)
     setGstin(c.gstin || '')
     setCustomerOpen(false)
+    setCustomerCollapsed(true)
   }
 
   function clearCustomer() {
@@ -205,6 +239,7 @@ export function NewQuotationPage() {
     setHouseName('')
     setPlace('')
     setGstin('')
+    setCustomerCollapsed(false)
   }
 
   function updateItem(key: string, patch: Partial<LineItem>) {
@@ -439,7 +474,20 @@ export function NewQuotationPage() {
         </div>
 
         {/* Customer + additional */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className={customerCollapsed && customerQuery.trim() ? 'flex items-start gap-4' : 'grid gap-4 lg:grid-cols-2'}>
+          {customerCollapsed && customerQuery.trim() ? (
+            <button
+              type="button"
+              title={customerQuery}
+              onClick={() => {
+                setCustomerCollapsed(false)
+                setTimeout(() => customerInputRef.current?.focus(), 0)
+              }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D8E4F2] bg-white text-[#0878F9] shadow-[0_2px_10px_rgba(6,41,92,0.03)] hover:bg-[#F5F9FF]"
+            >
+              <UserRound size={18} />
+            </button>
+          ) : (
           <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
             <h2 className="mb-3 text-[14px] font-semibold text-[#031C45]">Customer Details</h2>
             <div className="space-y-3">
@@ -452,6 +500,7 @@ export function NewQuotationPage() {
                       className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94A3B8]"
                     />
                     <input
+                      ref={customerInputRef}
                       value={customerQuery}
                       onChange={(e) => {
                         setCustomerQuery(e.target.value)
@@ -459,7 +508,13 @@ export function NewQuotationPage() {
                         if (!e.target.value) clearCustomer()
                       }}
                       onFocus={() => setCustomerOpen(true)}
-                      onBlur={() => setTimeout(() => setCustomerOpen(false), 150)}
+                      onBlur={(e) => {
+                        const value = e.currentTarget.value
+                        setTimeout(() => {
+                          setCustomerOpen(false)
+                          if (value.trim()) setCustomerCollapsed(true)
+                        }, 150)
+                      }}
                       placeholder="Search customer by name, phone or code"
                       className="h-9 w-full rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] text-[#031C45] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                     />
@@ -509,8 +564,9 @@ export function NewQuotationPage() {
               </div>
             </div>
           </section>
+          )}
 
-          <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
+          <section className={`rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)] ${customerCollapsed && customerQuery.trim() ? 'min-w-0 flex-1' : ''}`}>
             <h2 className="mb-3 text-[14px] font-semibold text-[#031C45]">Additional Details</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="GSTIN">
@@ -562,6 +618,14 @@ export function NewQuotationPage() {
                   onChange={(e) => {
                     setProductQuery(e.target.value)
                     setActiveRowKey(null)
+                    productAnchor.current = e.currentTarget
+                    placeProductMenu(e.currentTarget)
+                  }}
+                  onFocus={(e) => {
+                    if (!activeRowKey) {
+                      productAnchor.current = e.currentTarget
+                      placeProductMenu(e.currentTarget)
+                    }
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && productResults[0]) {
@@ -572,24 +636,6 @@ export function NewQuotationPage() {
                   placeholder="Search product (name, code or HSN)"
                   className="h-9 w-[260px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                 />
-                {productQuery && !activeRowKey && productResults.length > 0 ? (
-                  <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-[320px] max-h-52 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
-                    {productResults.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-[#F5F9FF]"
-                        onClick={() => addProductFromSearch(p)}
-                      >
-                        <span>
-                          <span className="font-medium">{p.name}</span>
-                          <span className="ml-2 text-[11px] text-[#62789A]">{p.sku || p.hsn}</span>
-                        </span>
-                        <span className="tabular-nums text-[#62789A]">{formatMoney(p.selling_rate)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
               </div>
               <Button type="button" onClick={addBlankRow}>
                 <Plus size={14} /> Add Item
@@ -626,30 +672,18 @@ export function NewQuotationPage() {
                             updateItem(item.key, { productName: e.target.value, productId: undefined })
                             setActiveRowKey(item.key)
                             setProductQuery(e.target.value)
+                            productAnchor.current = e.currentTarget
+                            placeProductMenu(e.currentTarget)
                           }}
-                          onFocus={() => {
+                          onFocus={(e) => {
                             setActiveRowKey(item.key)
+                            productAnchor.current = e.currentTarget
+                            placeProductMenu(e.currentTarget)
                             if (item.productName) setProductQuery(item.productName)
                           }}
                           placeholder="Type or search product..."
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"
                         />
-                        {activeRowKey === item.key && productResults.length > 0 ? (
-                          <div className="absolute left-3 right-3 top-[calc(100%-2px)] z-20 max-h-40 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
-                            {productResults.map((p) => (
-                              <button
-                                key={p.id}
-                                type="button"
-                                className="flex w-full items-center justify-between px-3 py-2 text-left text-[12.5px] hover:bg-[#F5F9FF]"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => applyProduct(item.key, p)}
-                              >
-                                <span>{p.name}</span>
-                                <span className="tabular-nums text-[#62789A]">{formatMoney(p.selling_rate)}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -891,6 +925,28 @@ export function NewQuotationPage() {
           </Field>
         </div>
       </Modal>
+      {productMenu && productResults.length > 0
+        ? createPortal(
+            <div
+              className="fixed z-[80] max-h-56 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg"
+              style={{ top: productMenu.top, left: productMenu.left, width: productMenu.width }}
+            >
+              {productResults.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[12.5px] hover:bg-[#F5F9FF]"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => (activeRowKey ? applyProduct(activeRowKey, p) : addProductFromSearch(p))}
+                >
+                  <span className="font-medium">{p.name}</span>
+                  <span className="shrink-0 tabular-nums text-[#62789A]">{formatMoney(p.selling_rate)}</span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

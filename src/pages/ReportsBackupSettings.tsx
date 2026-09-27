@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
 import { BrandLogo } from '@/components/BrandLogo'
+import { UpiQr, isUpiId } from '@/components/UpiQr'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatDateTime, formatMoney } from '@/utils'
 
@@ -299,11 +300,82 @@ export function BackupPage() {
   )
 }
 
+const GST_STATE_CODE = /^(0[1-9]|[1-2][0-9]|3[0-8]|97)$/
+
+function invoiceFieldErrors(
+  company: Record<string, unknown>,
+  settings: Record<string, string>,
+  accountConfirm: string,
+  strict: boolean,
+) {
+  const errors: Record<string, string> = {}
+  const prefix = String(company.invoice_prefix || '').trim()
+  if (!prefix) {
+    if (strict) errors.prefix = 'Enter an invoice prefix'
+  } else if (!/^[A-Za-z][A-Za-z0-9/-]{1,11}$/.test(prefix)) {
+    errors.prefix = 'Use 2–12 characters, starting with a letter'
+  }
+
+  const place = (settings.place_of_supply || '').trim()
+  if (!place) {
+    if (strict) errors.place = 'Enter the place of supply, such as Kerala (32)'
+  } else {
+    const match = place.match(/^(.+?)\s*\((\d{2})\)$/)
+    if (!match || match[1].trim().length < 2 || !GST_STATE_CODE.test(match[2])) {
+      errors.place = 'Use the state and GST code, such as Kerala (32)'
+    }
+  }
+
+  const accountName = (settings.bank_account_name || '').trim()
+  const accountNumber = (settings.bank_account_number || '').replace(/\s/g, '')
+  const ifsc = (settings.bank_ifsc || '').trim().toUpperCase()
+  const bankName = (settings.bank_name || '').trim()
+  const upi = (settings.upi_id || '').trim()
+  const bankStarted = Boolean(accountName || accountNumber || ifsc || bankName)
+
+  if (accountName && !/^[A-Za-z][A-Za-z0-9 .&'/,()-]*$/.test(accountName)) {
+    errors.accountName = 'Use the name as printed on the account'
+  } else if (strict && accountName && accountName.length < 2) {
+    errors.accountName = 'Account name must be at least 2 characters'
+  }
+  if (accountNumber && !/^\d{9,18}$/.test(accountNumber)) {
+    errors.accountNumber = 'Account number must be 9 to 18 digits'
+  }
+  const confirm = accountConfirm.replace(/\D/g, '')
+  if (accountNumber && !confirm) {
+    if (strict) errors.accountConfirm = 'Re-enter the account number'
+  } else if (confirm && confirm !== accountNumber && (strict || confirm.length >= accountNumber.length)) {
+    errors.accountConfirm = 'Account numbers do not match'
+  }
+  if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+    errors.ifsc = 'IFSC must be 11 characters, like HDFC0001234'
+  }
+  if (bankName && !/^[A-Za-z][A-Za-z0-9 .&'()-]*$/.test(bankName)) {
+    errors.bankName = 'Enter the bank name using letters and numbers'
+  } else if (strict && bankName && bankName.length < 2) {
+    errors.bankName = 'Bank name must be at least 2 characters'
+  }
+  if (upi && !isUpiId(upi)) {
+    errors.upi = 'Enter a UPI ID like name@okaxis or shop@hdfcbank'
+  }
+
+  if (strict && bankStarted) {
+    if (!accountName) errors.accountName ||= 'Enter the account name'
+    if (!accountNumber) errors.accountNumber ||= 'Enter the account number'
+    if (!ifsc) errors.ifsc ||= 'Enter the IFSC code'
+    if (!bankName) errors.bankName ||= 'Enter the bank name'
+  }
+
+  return errors
+}
+
 export function SettingsPage() {
   const { showToast, user, refreshCompany } = useAppStore()
   const [tab, setTab] = useState('company')
   const [company, setCompany] = useState<Record<string, unknown> | null>(null)
   const [settings, setSettings] = useState<Record<string, string>>({})
+  const [invoiceAttempted, setInvoiceAttempted] = useState(false)
+  const [accountConfirm, setAccountConfirm] = useState('')
   const [pin, setPin] = useState('')
   const [passwords, setPasswords] = useState({ current: '', next: '' })
 
@@ -313,7 +385,7 @@ export function SettingsPage() {
       callApi(() => window.bizora.getSettings()),
     ]).then(([c, s]) => {
       setCompany(c as Record<string, unknown>)
-      setSettings(s as Record<string, string>)
+      setSettings({ place_of_supply: 'Kerala (32)', ...(s as Record<string, string>) })
     })
   }, [])
 
@@ -327,6 +399,37 @@ export function SettingsPage() {
   async function saveSettings() {
     await callApi(() => window.bizora.updateSettings(settings))
     showToast('Settings saved', 'success')
+  }
+
+  async function saveInvoiceSettings() {
+    if (!company) return
+    setInvoiceAttempted(true)
+    const nextCompany = {
+      ...company,
+      invoice_prefix: String(company.invoice_prefix || '').trim().toUpperCase(),
+    }
+    const nextSettings = {
+      ...settings,
+      place_of_supply: (settings.place_of_supply || '').trim(),
+      bank_account_name: (settings.bank_account_name || '').trim(),
+      bank_account_number: (settings.bank_account_number || '').replace(/\D/g, ''),
+      bank_ifsc: (settings.bank_ifsc || '').replace(/\s/g, '').toUpperCase(),
+      bank_name: (settings.bank_name || '').trim(),
+      upi_id: (settings.upi_id || '').trim(),
+    }
+    const errors = invoiceFieldErrors(nextCompany, nextSettings, accountConfirm, true)
+    setCompany(nextCompany)
+    setSettings(nextSettings)
+    const first = Object.values(errors)[0]
+    if (first) {
+      showToast(first, 'error')
+      return
+    }
+    await callApi(() => window.bizora.updateCompany(nextCompany))
+    await refreshCompany()
+    await callApi(() => window.bizora.updateSettings(nextSettings))
+    setAccountConfirm(nextSettings.bank_account_number)
+    showToast('Invoice settings saved', 'success')
   }
 
   async function setupPin() {
@@ -350,6 +453,9 @@ export function SettingsPage() {
   }
 
   if (!company) return <Spinner />
+
+  const invoiceErrors = invoiceFieldErrors(company, settings, accountConfirm, invoiceAttempted)
+  const invalidInput = 'border-red-500 focus:border-red-500 focus:ring-red-500/15'
 
   const tabs = [
     { id: 'company', label: 'Company' },
@@ -401,9 +507,17 @@ export function SettingsPage() {
       ) : null}
 
       {tab === 'invoice' ? (
-        <Card className="max-w-xl space-y-3 p-5">
-          <Field label="Invoice Prefix">
-            <Input value={String(company.invoice_prefix || '')} onChange={(e) => setCompany({ ...company, invoice_prefix: e.target.value })} />
+        <Card className="max-w-4xl p-5">
+          <div className="grid items-start gap-6 md:grid-cols-2">
+          <div className="space-y-3">
+          <Field label="Invoice Prefix" error={invoiceErrors.prefix}>
+            <Input
+              value={String(company.invoice_prefix || '')}
+              maxLength={12}
+              placeholder="INV"
+              className={invoiceErrors.prefix ? invalidInput : ''}
+              onChange={(e) => setCompany({ ...company, invoice_prefix: e.target.value.toUpperCase() })}
+            />
           </Field>
           <Field label="Tax Mode">
             <Select value={String(company.tax_mode || 'gst')} onChange={(e) => setCompany({ ...company, tax_mode: e.target.value })}>
@@ -417,47 +531,95 @@ export function SettingsPage() {
               <option value="thermal">Thermal</option>
             </Select>
           </Field>
-          <Field label="Place of Supply (PDF)">
+          <Field label="Place of Supply (PDF)" error={invoiceErrors.place}>
             <Input
-              value={settings.place_of_supply || 'Kerala (32)'}
+              value={settings.place_of_supply ?? ''}
+              placeholder="Kerala (32)"
+              className={invoiceErrors.place ? invalidInput : ''}
               onChange={(e) => setSettings({ ...settings, place_of_supply: e.target.value })}
             />
           </Field>
-          <div className="border-t border-border pt-3">
-            <div className="mb-2 text-sm font-semibold">Bank Details (PDF)</div>
-            <div className="space-y-3">
-              <Field label="Account Name">
+          </div>
+          <div className="space-y-3 md:border-l md:border-border md:pl-6">
+            <div className="text-sm font-semibold">Bank Details (PDF)</div>
+              <Field label="Account Name" error={invoiceErrors.accountName}>
                 <Input
                   value={settings.bank_account_name || ''}
+                  maxLength={80}
+                  placeholder="Name on the account"
+                  className={invoiceErrors.accountName ? invalidInput : ''}
                   onChange={(e) => setSettings({ ...settings, bank_account_name: e.target.value })}
                 />
               </Field>
-              <Field label="Account Number">
+              <Field label="Account Number" error={invoiceErrors.accountNumber}>
                 <Input
                   value={settings.bank_account_number || ''}
-                  onChange={(e) => setSettings({ ...settings, bank_account_number: e.target.value })}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={18}
+                  placeholder="9 to 18 digits"
+                  className={invoiceErrors.accountNumber ? invalidInput : ''}
+                  onChange={(e) =>
+                    setSettings({ ...settings, bank_account_number: e.target.value.replace(/\D/g, '').slice(0, 18) })
+                  }
                 />
               </Field>
-              <Field label="IFSC Code">
+              <Field label="Re-enter Account Number" error={invoiceErrors.accountConfirm}>
+                <Input
+                  value={accountConfirm}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={18}
+                  placeholder="Type the account number again"
+                  className={invoiceErrors.accountConfirm ? invalidInput : ''}
+                  onChange={(e) => setAccountConfirm(e.target.value.replace(/\D/g, '').slice(0, 18))}
+                  onPaste={(e) => e.preventDefault()}
+                />
+              </Field>
+              <Field label="IFSC Code" error={invoiceErrors.ifsc}>
                 <Input
                   value={settings.bank_ifsc || ''}
-                  onChange={(e) => setSettings({ ...settings, bank_ifsc: e.target.value })}
+                  maxLength={11}
+                  placeholder="HDFC0001234"
+                  className={invoiceErrors.ifsc ? invalidInput : ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      bank_ifsc: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 11),
+                    })
+                  }
                 />
               </Field>
-              <Field label="Bank Name">
+              <Field label="Bank Name" error={invoiceErrors.bankName}>
                 <Input
                   value={settings.bank_name || ''}
+                  maxLength={60}
+                  placeholder="Bank name"
+                  className={invoiceErrors.bankName ? invalidInput : ''}
                   onChange={(e) => setSettings({ ...settings, bank_name: e.target.value })}
                 />
               </Field>
-            </div>
+              <Field label="UPI ID" error={invoiceErrors.upi}>
+                <Input
+                  value={settings.upi_id || ''}
+                  placeholder="name@okaxis"
+                  className={invoiceErrors.upi ? invalidInput : ''}
+                  onChange={(e) => setSettings({ ...settings, upi_id: e.target.value.replace(/\s/g, '') })}
+                />
+              </Field>
+              {isUpiId(settings.upi_id || '') ? (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-slate-50 p-3">
+                  <UpiQr upiId={settings.upi_id} payeeName={String(company.name || '')} size={132} />
+                  <div className="text-[12px] text-ink-muted">
+                    <div className="font-medium text-ink">Scan to pay</div>
+                    <div>{settings.upi_id}</div>
+                    <div className="mt-1">Invoices include this QR with the bill amount.</div>
+                  </div>
+                </div>
+              ) : null}
           </div>
-          <Button
-            onClick={() => {
-              void saveCompany()
-              void saveSettings()
-            }}
-          >
+          </div>
+          <Button className="mt-4" onClick={() => void saveInvoiceSettings()}>
             Save Invoice Settings
           </Button>
         </Card>
