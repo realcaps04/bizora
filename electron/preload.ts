@@ -33,7 +33,16 @@ const api = {
   listProducts: (opts?: Record<string, unknown>) => invoke(IpcChannels.PRODUCTS_LIST, opts),
   getProduct: (id: string) => invoke(IpcChannels.PRODUCTS_GET, { id }),
   createProduct: (data: Record<string, unknown>) => invoke(IpcChannels.PRODUCTS_CREATE, data),
+  createProducts: (items: Record<string, unknown>[]) => invoke(IpcChannels.PRODUCTS_BULK_CREATE, { items }),
+  listProductCatalog: () => invoke(IpcChannels.PRODUCTS_CATALOG),
+  importProductCatalog: (companyCategory: string) => invoke(IpcChannels.PRODUCTS_IMPORT_CATALOG, { companyCategory }),
+  listStarterCatalogs: () => invoke(IpcChannels.PRODUCTS_STARTER_CATALOGS),
+  previewStarterCatalog: (catalogId: string, opts?: { search?: string; page?: number; pageSize?: number }) =>
+    invoke(IpcChannels.PRODUCTS_PREVIEW_STARTER, { catalogId, ...opts }),
+  importStarterCatalog: (catalogId: string) => invoke(IpcChannels.PRODUCTS_IMPORT_STARTER, { catalogId }),
   updateProduct: (data: Record<string, unknown>) => invoke(IpcChannels.PRODUCTS_UPDATE, data),
+  deleteProduct: (id: string) => invoke(IpcChannels.PRODUCTS_DELETE, { id }),
+  deleteProducts: (ids: string[]) => invoke(IpcChannels.PRODUCTS_DELETE, { ids }),
   adjustStock: (id: string, qty: number, notes?: string) =>
     invoke(IpcChannels.PRODUCTS_ADJUST_STOCK, { id, qty, notes }),
   searchProducts: (q: string) => invoke(IpcChannels.PRODUCTS_SEARCH, { q }),

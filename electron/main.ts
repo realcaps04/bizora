@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { initDatabase, closeDatabase, persistNow } from './database'
 import { registerIpcHandlers } from './ipc/handlers'
-import { shouldAutoLock, lockSession } from './security/session'
+import { shouldAutoLock, lockSession, restoreSession } from './security/session'
 import {
   applyWindowsIdentity,
   enforceSingleInstance,
@@ -102,6 +102,7 @@ function boot(): void {
   app.whenReady().then(async () => {
     try {
       await initDatabase()
+      restoreSession()
       registerIpcHandlers()
       createWindow()
     } catch (error) {

@@ -12,6 +12,7 @@ import { NewSalePage } from '@/pages/NewSalePage'
 import { CustomersPage, CustomerDetailPage } from '@/pages/CustomersPage'
 import { ProductsPage } from '@/pages/ProductsPage'
 import { AddProductPage } from '@/pages/AddProductPage'
+import { BulkProductsPage } from '@/pages/BulkProductsPage'
 import { SalesPage, InvoicesPage, InvoiceDetailPage } from '@/pages/InvoicesPage'
 import { NewPurchasePage } from '@/pages/NewPurchasePage'
 import { NewQuotationPage } from '@/pages/NewQuotationPage'
@@ -27,9 +28,26 @@ import {
 
 const Router = window.bizora ? HashRouter : BrowserRouter
 
+function EditProductRoute() {
+  const { id = '' } = useParams()
+  return <AddProductPage productId={id} />
+}
+
 function CustomerDetailRoute() {
   const { id = '' } = useParams()
   return <CustomerDetailPage id={id} />
+}
+
+function savedPage(): string {
+  const saved = localStorage.getItem('bizora.lastPath') || ''
+  if (!saved.startsWith('/') || saved === '/' || saved.startsWith('/login') || saved.startsWith('/register')) {
+    return '/sales/new'
+  }
+  return saved
+}
+
+function ResumePage() {
+  return <Navigate to={savedPage()} replace />
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -61,7 +79,7 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/welcome" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={authenticated && !locked ? <Navigate to="/sales/new" replace /> : <LoginPage />} />
+        <Route path="/login" element={authenticated && !locked ? <ResumePage /> : <LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/restore" element={<RestorePage />} />
 
@@ -72,7 +90,7 @@ export default function App() {
             </Protected>
           }
         >
-          <Route path="/" element={<Navigate to="/sales/new" replace />} />
+          <Route path="/" element={<ResumePage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/sales/new" element={<NewSalePage />} />
@@ -85,6 +103,8 @@ export default function App() {
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:id" element={<CustomerDetailRoute />} />
           <Route path="/products/new" element={<AddProductPage />} />
+          <Route path="/products/:id/edit" element={<EditProductRoute />} />
+          <Route path="/products/bulk" element={<BulkProductsPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/purchases/new" element={<NewPurchasePage />} />
           <Route path="/purchases" element={<PurchasesPage />} />

@@ -90,7 +90,7 @@ export function DashboardPage() {
             {[
               { label: 'New Sale', to: '/sales/new' },
               { label: 'New Customer', to: '/customers?new=1' },
-              { label: 'Add Product', to: '/products/new' },
+              { label: 'Add Product', to: '/products?add=1' },
               { label: 'Create Quotation', to: '/quotations/new' },
               { label: 'View Reports', to: '/reports' },
             ].map((a) => (

@@ -70,6 +70,8 @@ const PRODUCT_EXTRA_COLUMNS: Array<[string, string]> = [
   ['description', 'TEXT'],
   ['supplier', 'TEXT'],
   ['product_type', 'TEXT'],
+  ['unit', 'TEXT'],
+  ['company_category', 'TEXT'],
 ]
 
 function ensureProductColumns(): void {

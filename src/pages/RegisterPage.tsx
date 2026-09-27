@@ -17,6 +17,7 @@ import { WindowControls } from '@/components/login/WindowControls'
 import { TextInput } from '@/components/login/TextInput'
 import { PasswordInput } from '@/components/login/PasswordInput'
 import { PrimaryButton } from '@/components/login/Buttons'
+import { COMPANY_CATEGORIES } from '@/data/companyCategories'
 import { cn, callApi } from '@/utils'
 import { useAppStore } from '@/stores/app'
 
@@ -27,7 +28,7 @@ const schema = z
     password: z.string().min(8, 'Password must be at least 8 characters'),
     confirmPassword: z.string(),
     companyName: z.string().min(2, 'Company name is required'),
-    businessType: z.string().optional(),
+    businessType: z.string().min(2, 'Choose a business type'),
     mobile: z.string().optional(),
     companyEmail: z.string().optional(),
     gstin: z.string().optional(),
@@ -61,7 +62,7 @@ export function RegisterPage() {
       currency: 'INR',
       invoicePrefix: 'INV',
       taxMode: 'gst',
-      businessType: 'Retail',
+      businessType: '',
     },
   })
 
@@ -196,11 +197,12 @@ export function RegisterPage() {
                     </LabeledField>
                     <LabeledField label="Business Type">
                       <SelectField {...form.register('businessType')}>
-                        <option>Retail</option>
-                        <option>Wholesale</option>
-                        <option>Services</option>
-                        <option>Manufacturing</option>
-                        <option>Other</option>
+                        <option value="">Select business type</option>
+                        {COMPANY_CATEGORIES.map((item) => (
+                          <option key={item.id} value={item.name}>
+                            {item.name}
+                          </option>
+                        ))}
                       </SelectField>
                     </LabeledField>
                     <LabeledField label="Mobile">

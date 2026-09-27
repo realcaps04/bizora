@@ -3,6 +3,7 @@ import { IpcChannels } from './channels'
 import { AppError, getSession, lockSession, unlockSession, shouldAutoLock } from '../security/session'
 import * as auth from '../services/auth'
 import * as catalog from '../services/catalog'
+import * as starterCatalogs from '../services/starterCatalogs'
 import * as invoices from '../services/invoices'
 import * as operations from '../services/operations'
 import * as reports from '../services/reports'
@@ -119,9 +120,25 @@ export function registerIpcHandlers(): void {
     [IpcChannels.PRODUCTS_LIST]: (payload) => catalog.listProducts((payload as object) || {}),
     [IpcChannels.PRODUCTS_GET]: (payload) => catalog.getProduct((payload as { id: string }).id),
     [IpcChannels.PRODUCTS_CREATE]: (payload) => catalog.createProduct(payload as Parameters<typeof catalog.createProduct>[0]),
+    [IpcChannels.PRODUCTS_BULK_CREATE]: (payload) =>
+      catalog.createProducts((payload as { items: Parameters<typeof catalog.createProduct>[0][] }).items || []),
+    [IpcChannels.PRODUCTS_CATALOG]: () => catalog.listProductCatalog(),
+    [IpcChannels.PRODUCTS_IMPORT_CATALOG]: (payload) =>
+      catalog.importProductCatalog((payload as { companyCategory: string }).companyCategory),
+    [IpcChannels.PRODUCTS_STARTER_CATALOGS]: () => starterCatalogs.listStarterCatalogs(),
+    [IpcChannels.PRODUCTS_PREVIEW_STARTER]: (payload) =>
+      starterCatalogs.previewStarterCatalog((payload as { catalogId: string; search?: string; page?: number; pageSize?: number }) || { catalogId: '' }),
+    [IpcChannels.PRODUCTS_IMPORT_STARTER]: (payload) =>
+      starterCatalogs.importStarterCatalog((payload as { catalogId: string }).catalogId),
     [IpcChannels.PRODUCTS_UPDATE]: (payload) => {
       const p = payload as { id: string } & Record<string, unknown>
       return catalog.updateProduct(p.id, p)
+    },
+    [IpcChannels.PRODUCTS_DELETE]: (payload) => {
+      const body = payload as { id?: string; ids?: string[] }
+      if (body.ids?.length) return catalog.deleteProducts(body.ids)
+      catalog.deleteProduct(body.id || '')
+      return true
     },
     [IpcChannels.PRODUCTS_ADJUST_STOCK]: (payload) => {
       const p = payload as { id: string; qty: number; notes?: string }

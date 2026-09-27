@@ -45,6 +45,7 @@ export interface Product {
   current_stock: number
   min_stock: number
   status: string
+  unit?: string
 }
 
 export interface Invoice {
@@ -94,7 +95,15 @@ export interface BizoraApi {
   listProducts: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   getProduct: (id: string) => Promise<ApiResult<unknown>>
   createProduct: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
+  createProducts: (items: Record<string, unknown>[]) => Promise<ApiResult<unknown>>
+  listProductCatalog: () => Promise<ApiResult<unknown>>
+  importProductCatalog: (companyCategory: string) => Promise<ApiResult<unknown>>
+  listStarterCatalogs: () => Promise<ApiResult<unknown>>
+  previewStarterCatalog: (catalogId: string, opts?: { search?: string; page?: number; pageSize?: number }) => Promise<ApiResult<unknown>>
+  importStarterCatalog: (catalogId: string) => Promise<ApiResult<unknown>>
   updateProduct: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
+  deleteProduct: (id: string) => Promise<ApiResult<unknown>>
+  deleteProducts: (ids: string[]) => Promise<ApiResult<unknown>>
   adjustStock: (id: string, qty: number, notes?: string) => Promise<ApiResult<unknown>>
   searchProducts: (q: string) => Promise<ApiResult<unknown>>
   listInvoices: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>

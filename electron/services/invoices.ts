@@ -2,6 +2,7 @@ import { queryAll, queryOne, run, withTransaction } from '../database'
 import { generateId } from '../security/crypto'
 import { AppError, requireAuth, requirePermission } from '../security/session'
 import { writeAudit } from './auth'
+import { syncProductById } from './accountCloud'
 
 function now(): string {
   return new Date().toISOString()
@@ -298,6 +299,9 @@ export function createInvoice(input: {
     writeAudit(user.companyId, user, 'invoice.created', 'invoices', invoiceId, `Invoice created`)
   })
 
+  for (const item of input.items) {
+    if (item.productId) syncProductById(item.productId)
+  }
   return getInvoice(invoiceId)
 }
 
@@ -330,6 +334,13 @@ export function cancelInvoice(id: string) {
     run(`UPDATE invoices SET status = 'cancelled', updated_at = ? WHERE id = ? AND company_id = ?`, [ts, id, user.companyId])
     writeAudit(user.companyId, user, 'invoice.cancelled', 'invoices', id, `Invoice ${invoice.invoice_number} cancelled`)
   })
+  const changed = queryAll<{ product_id: string | null }>(
+    'SELECT product_id FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
+    [id, user.companyId],
+  )
+  for (const item of changed) {
+    if (item.product_id) syncProductById(item.product_id)
+  }
   return getInvoice(id)
 }
 

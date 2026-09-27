@@ -3,6 +3,7 @@ import { generateId } from '../security/crypto'
 import { AppError, requireAuth, requirePermission } from '../security/session'
 import { writeAudit } from './auth'
 import { createInvoice, type InvoiceItemInput } from './invoices'
+import { syncProductById } from './accountCloud'
 
 function now(): string {
   return new Date().toISOString()
@@ -323,6 +324,7 @@ export function createPurchase(input: {
     writeAudit(user.companyId, user, 'purchase.created', 'purchases', id, `Purchase from ${input.supplierName}`)
   })
 
+  for (const item of calcs) syncProductById(item.productId)
   return queryOne('SELECT * FROM purchases WHERE id = ?', [id])
 }
 

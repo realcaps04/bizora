@@ -1,6 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Boxes, ChevronRight, FileText, IndianRupee, Package } from 'lucide-react'
+import { COMPANY_CATEGORIES } from '@/data/companyCategories'
+import { PRODUCT_UNITS } from '@/data/units'
 import { useAppStore } from '@/stores/app'
 import { callApi, cn } from '@/utils'
 
@@ -55,15 +57,18 @@ function Section({
   )
 }
 
-export function AddProductPage() {
+export function AddProductPage({ productId }: { productId?: string }) {
   const navigate = useNavigate()
   const { showToast } = useAppStore()
+  const editing = Boolean(productId)
+  const [loadingProduct, setLoadingProduct] = useState(editing)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     name: '',
     sku: '',
     barcode: '',
     category: '',
+    companyCategory: '',
     brand: '',
     hsn: '',
     purchaseRate: '0.00',
@@ -77,6 +82,7 @@ export function AddProductPage() {
     description: '',
     supplier: '',
     productType: 'Normal',
+    unit: 'Pcs',
     active: true,
   })
 
@@ -90,36 +96,85 @@ export function AddProductPage() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  useEffect(() => {
+    if (!productId) return
+    void callApi(() => window.bizora.getProduct(productId))
+      .then((row) => {
+        const product = row as Record<string, unknown>
+        const rate = Number(product.tax_rate)
+        setForm({
+          name: String(product.name || ''),
+          sku: String(product.sku || ''),
+          barcode: String(product.barcode || ''),
+          category: String(product.category || ''),
+          companyCategory: String(product.company_category || ''),
+          brand: String(product.brand || ''),
+          hsn: String(product.hsn || ''),
+          purchaseRate: money(Number(product.purchase_rate) || 0),
+          sellingRate: money(Number(product.selling_rate) || 0),
+          mrp: money(Number(product.mrp) || 0),
+          taxRate: Number.isFinite(rate) ? String(rate) : '',
+          openingStock: String(product.current_stock ?? 0),
+          minStock: String(product.min_stock ?? ''),
+          reorderLevel: String(product.reorder_level ?? ''),
+          location: String(product.location || ''),
+          description: String(product.description || ''),
+          supplier: String(product.supplier || ''),
+          productType: String(product.product_type || 'Normal'),
+          unit: String(product.unit || 'Pcs'),
+          active: product.status !== 'inactive',
+        })
+      })
+      .catch((err) => showToast(err instanceof Error ? err.message : 'Unable to open this product', 'error'))
+      .finally(() => setLoadingProduct(false))
+  }, [productId])
+
   async function save() {
-    if (!form.name.trim() || !form.sku.trim() || !form.category.trim() || form.taxRate === '') {
+    if (!form.name.trim() || !form.sku.trim() || !form.category.trim() || !form.companyCategory || form.taxRate === '') {
       showToast('Fill the required product fields', 'error')
       return
     }
+    const details = {
+      name: form.name.trim(),
+      sku: form.sku.trim(),
+      barcode: form.barcode.trim(),
+      category: form.category.trim(),
+      companyCategory: form.companyCategory,
+      brand: form.brand.trim(),
+      hsn: form.hsn.trim(),
+      purchaseRate: purchase,
+      sellingRate: sale,
+      mrp: Number(form.mrp) || 0,
+      taxRate: gst,
+      minStock: Number(form.minStock) || 0,
+      reorderLevel: Number(form.reorderLevel) || 0,
+      location: form.location.trim(),
+      description: form.description.trim(),
+      supplier: form.supplier.trim(),
+      productType: form.productType,
+      unit: form.unit || 'Pcs',
+      status: form.active ? 'active' : 'inactive',
+    }
     setSaving(true)
     try {
-      await callApi(() =>
-        window.bizora.createProduct({
-          name: form.name.trim(),
-          sku: form.sku.trim(),
-          barcode: form.barcode.trim(),
-          category: form.category.trim(),
-          brand: form.brand.trim(),
-          hsn: form.hsn.trim(),
-          purchaseRate: purchase,
-          sellingRate: sale,
-          mrp: Number(form.mrp) || 0,
-          taxRate: gst,
-          openingStock: Number(form.openingStock) || 0,
-          minStock: Number(form.minStock) || 0,
-          reorderLevel: Number(form.reorderLevel) || 0,
-          location: form.location.trim(),
-          description: form.description.trim(),
-          supplier: form.supplier.trim(),
-          productType: form.productType,
-          status: form.active ? 'active' : 'inactive',
-        }),
-      )
-      showToast('Product added', 'success')
+      if (productId) {
+        await callApi(() =>
+          window.bizora.updateProduct({
+            id: productId,
+            ...details,
+            currentStock: Number(form.openingStock) || 0,
+          }),
+        )
+        showToast('Product updated for this company', 'success')
+      } else {
+        await callApi(() =>
+          window.bizora.createProduct({
+            ...details,
+            openingStock: Number(form.openingStock) || 0,
+          }),
+        )
+        showToast('Product added to this company', 'success')
+      }
       navigate('/products')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Unable to save product', 'error')
@@ -138,10 +193,14 @@ export function AddProductPage() {
                 Products
               </Link>
               <ChevronRight size={14} />
-              <span className="font-medium text-[#031C45]">Add Product</span>
+              <span className="font-medium text-[#031C45]">{editing ? 'Edit Product' : 'Add Product'}</span>
             </div>
-            <h1 className="text-[22px] font-bold tracking-tight text-[#031C45]">Add Product</h1>
-            <p className="mt-0.5 text-[13px] text-[#62789A]">Enter product details to add it to your inventory.</p>
+            <h1 className="text-[22px] font-bold tracking-tight text-[#031C45]">{editing ? 'Edit Product' : 'Add Product'}</h1>
+            <p className="mt-0.5 text-[13px] text-[#62789A]">
+              {editing
+                ? 'This product belongs to the company you are signed in to. Price and details you change stay on this account.'
+                : 'This product is saved on the company you are signed in to.'}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -153,11 +212,11 @@ export function AddProductPage() {
             </button>
             <button
               type="button"
-              disabled={saving}
+              disabled={saving || loadingProduct}
               onClick={() => void save()}
               className="inline-flex h-9 items-center rounded-[10px] bg-[#0878F9] px-4 text-[13px] font-semibold text-white hover:bg-[#0668d6] disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save Product'}
+              {saving ? 'Saving…' : editing ? 'Save changes' : 'Save Product'}
             </button>
           </div>
         </div>
@@ -181,6 +240,20 @@ export function AddProductPage() {
               <Label>Barcode (Optional)</Label>
               <input className={fieldClass} placeholder="Enter barcode" value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
             </div>
+            <div className="md:col-span-3">
+              <Label required>Company category</Label>
+              <select className={fieldClass} value={form.companyCategory} onChange={(e) => set('companyCategory', e.target.value)}>
+                <option value="">Select company category</option>
+                {COMPANY_CATEGORIES.map((item) => (
+                  <option key={item.id} value={item.name}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-[#62789A]">
+                A new company that registers with this type can add this product to its own list.
+              </p>
+            </div>
             <div>
               <Label required>Category</Label>
               <input className={fieldClass} list="product-categories" placeholder="Select category" value={form.category} onChange={(e) => set('category', e.target.value)} />
@@ -197,6 +270,17 @@ export function AddProductPage() {
             <div>
               <Label>HSN Code (Optional)</Label>
               <input className={fieldClass} placeholder="Enter HSN code" value={form.hsn} onChange={(e) => set('hsn', e.target.value)} />
+            </div>
+            <div>
+              <Label required>Unit</Label>
+              <select className={fieldClass} value={form.unit} onChange={(e) => set('unit', e.target.value)}>
+                {PRODUCT_UNITS.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+                {form.unit && !PRODUCT_UNITS.includes(form.unit) ? <option value={form.unit}>{form.unit}</option> : null}
+              </select>
             </div>
           </div>
         </Section>
@@ -224,7 +308,10 @@ export function AddProductPage() {
               <Label required>GST (%)</Label>
               <select className={fieldClass} value={form.taxRate} onChange={(e) => set('taxRate', e.target.value)}>
                 <option value="">Select GST</option>
-                {GST_RATES.map((rate) => (
+                {(GST_RATES.includes(Number(form.taxRate)) || form.taxRate === ''
+                  ? GST_RATES
+                  : [...GST_RATES, Number(form.taxRate)]
+                ).map((rate) => (
                   <option key={rate} value={rate}>
                     {rate}%
                   </option>
@@ -248,7 +335,7 @@ export function AddProductPage() {
         >
           <div className="grid gap-4 md:grid-cols-4">
             <div>
-              <Label required>Opening Stock</Label>
+              <Label required>{editing ? 'Stock' : 'Opening Stock'}</Label>
               <input className={fieldClass} inputMode="decimal" value={form.openingStock} onChange={(e) => set('openingStock', e.target.value)} />
             </div>
             <div>

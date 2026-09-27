@@ -191,3 +191,84 @@ export function syncCompanyAccountsQuiet(companyId: string): void {
     console.error('[convex] account sync failed:', err instanceof Error ? err.message : err)
   })
 }
+
+function companyBusinessType(companyId: string): string {
+  const company = queryOne<{ business_type: string | null }>('SELECT business_type FROM companies WHERE id = ?', [companyId])
+  return company?.business_type || ''
+}
+
+function optionalText(value: unknown): string | undefined {
+  const text = value == null ? '' : String(value).trim()
+  return text || undefined
+}
+
+/** Copy one local product into the Convex product catalog. Stock updates do not republish prices. */
+export function syncProductQuiet(row: Record<string, unknown> | null | undefined, stockOnly = false): void {
+  if (!row || !cloudReady()) return
+  const gstRate = Number(row.tax_rate) || 0
+  const taxType = gstRate > 0 ? 'gst' : 'non_gst'
+  void callConvex('mutation', 'products:upsert', {
+    localId: String(row.id),
+    companyLocalId: String(row.company_id),
+    name: String(row.name || ''),
+    sku: optionalText(row.sku),
+    barcode: optionalText(row.barcode),
+    category: optionalText(row.category),
+    companyCategory: optionalText(row.company_category) || optionalText(companyBusinessType(String(row.company_id))),
+    brand: optionalText(row.brand),
+    hsn: optionalText(row.hsn),
+    taxType,
+    gstRate: taxType === 'gst' ? gstRate : 0,
+    purchaseRate: Number(row.purchase_rate) || 0,
+    sellingRate: Number(row.selling_rate) || 0,
+    mrp: Number(row.mrp) || 0,
+    openingStock: Number(row.opening_stock) || 0,
+    currentStock: Number(row.current_stock) || 0,
+    minStock: Number(row.min_stock) || 0,
+    reorderLevel: Number(row.reorder_level) || 0,
+    location: optionalText(row.location),
+    description: optionalText(row.description),
+    supplier: optionalText(row.supplier),
+    productType: optionalText(row.product_type),
+    status: String(row.status || 'active'),
+    createdAt: String(row.created_at || new Date().toISOString()),
+    updatedAt: String(row.updated_at || new Date().toISOString()),
+    stockOnly,
+  }).catch((err) => {
+    console.error('[convex] product sync failed:', err instanceof Error ? err.message : err)
+  })
+}
+
+export function syncProductById(productId: string): void {
+  const row = queryOne<Record<string, unknown>>('SELECT * FROM products WHERE id = ?', [productId])
+  syncProductQuiet(row, true)
+}
+
+export interface SharedCatalogProduct {
+  name: string
+  sku: string
+  barcode: string
+  category: string
+  brand: string
+  hsn: string
+  taxType: 'gst' | 'non_gst'
+  gstRate: number
+  purchaseRate: number
+  sellingRate: number
+  mrp: number
+  minStock: number
+  reorderLevel: number
+  description: string
+  supplier: string
+  productType: string
+}
+
+export async function listSharedCatalog(companyCategory?: string): Promise<{
+  categories: string[]
+  products: SharedCatalogProduct[]
+}> {
+  if (!cloudReady()) return { categories: [], products: [] }
+  return callConvex<{ categories: string[]; products: SharedCatalogProduct[] }>('query', 'products:listShared', {
+    companyCategory: companyCategory?.trim() || undefined,
+  })
+}

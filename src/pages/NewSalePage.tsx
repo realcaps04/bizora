@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   Calendar,
@@ -8,10 +9,12 @@ import {
   Search,
   Settings,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatMoney, joinAddress, parseAddress } from '@/utils'
+import { PRODUCT_UNITS, productUnit } from '@/data/units'
 import type { Customer, Product } from '@/types'
 
 interface LineItem {
@@ -49,7 +52,7 @@ function emptyLine(): LineItem {
   return {
     key: `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     productName: '',
-    specification: '',
+    specification: 'Pcs',
     hsn: '',
     qty: 1,
     rate: 0,
@@ -75,6 +78,8 @@ export function NewSalePage() {
   const [customerId, setCustomerId] = useState('')
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerOpen, setCustomerOpen] = useState(false)
+  const [customerCollapsed, setCustomerCollapsed] = useState(false)
+  const customerInputRef = useRef<HTMLInputElement>(null)
   const [houseName, setHouseName] = useState('')
   const [place, setPlace] = useState('')
   const [gstin, setGstin] = useState('')
@@ -85,6 +90,17 @@ export function NewSalePage() {
   const [productQuery, setProductQuery] = useState('')
   const [productResults, setProductResults] = useState<Product[]>([])
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null)
+  const productAnchor = useRef<HTMLInputElement | null>(null)
+  const [productMenu, setProductMenu] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  function placeProductMenu(el?: HTMLInputElement | null) {
+    const node = el ?? productAnchor.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    const width = Math.min(640, Math.max(rect.width, 560))
+    const left = Math.min(rect.left, window.innerWidth - width - 8)
+    setProductMenu({ top: rect.bottom + 4, left: Math.max(8, left), width })
+  }
   const [saving, setSaving] = useState(false)
   const [newCustomerOpen, setNewCustomerOpen] = useState(false)
   const [newCustomer, setNewCustomer] = useState({
@@ -135,6 +151,21 @@ export function NewSalePage() {
     return () => clearTimeout(t)
   }, [productQuery])
 
+  useEffect(() => {
+    if (!activeRowKey || productResults.length === 0) {
+      setProductMenu(null)
+      return
+    }
+    placeProductMenu()
+    const onMove = () => placeProductMenu()
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  }, [activeRowKey, productResults])
+
   const filledItems = useMemo(
     () => items.filter((i) => i.productName.trim() && i.qty > 0),
     [items],
@@ -174,6 +205,7 @@ export function NewSalePage() {
     setPlace(parsed.place)
     setGstin(c.gstin || '')
     setCustomerOpen(false)
+    setCustomerCollapsed(true)
   }
 
   function clearCustomer() {
@@ -196,6 +228,7 @@ export function NewSalePage() {
     updateItem(key, {
       productId: p.id,
       productName: p.name,
+      specification: productUnit(p.unit),
       hsn: p.hsn || '',
       rate: Number(p.selling_rate) || 0,
       taxRate: Number(p.tax_rate) || 18,
@@ -215,6 +248,7 @@ export function NewSalePage() {
                 ...i,
                 productId: p.id,
                 productName: p.name,
+                specification: productUnit(p.unit),
                 hsn: p.hsn || '',
                 rate: Number(p.selling_rate) || 0,
                 taxRate: Number(p.tax_rate) || 18,
@@ -228,7 +262,7 @@ export function NewSalePage() {
           key: `line-${Date.now()}`,
           productId: p.id,
           productName: p.name,
-          specification: '',
+          specification: productUnit(p.unit),
           hsn: p.hsn || '',
           qty: 1,
           rate: Number(p.selling_rate) || 0,
@@ -387,6 +421,20 @@ export function NewSalePage() {
         </div>
 
         {/* Customer */}
+        {customerCollapsed && customerQuery.trim() ? (
+          <button
+            type="button"
+            title={customerQuery}
+            onClick={() => {
+              setCustomerCollapsed(false)
+              setTimeout(() => customerInputRef.current?.focus(), 0)
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-[#D8E4F2] bg-white text-[#0878F9] shadow-[0_2px_10px_rgba(6,41,92,0.03)] hover:bg-[#F5F9FF]"
+          >
+            <UserRound size={18} />
+          </button>
+        ) : null}
+        {customerCollapsed && customerQuery.trim() ? null : (
         <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <div className="space-y-3">
@@ -405,8 +453,14 @@ export function NewSalePage() {
                         setCustomerOpen(true)
                         if (!e.target.value) clearCustomer()
                       }}
+                      ref={customerInputRef}
                       onFocus={() => setCustomerOpen(true)}
-                      onBlur={() => setTimeout(() => setCustomerOpen(false), 150)}
+                      onBlur={() =>
+                        setTimeout(() => {
+                          setCustomerOpen(false)
+                          if (customerQuery.trim()) setCustomerCollapsed(true)
+                        }, 150)
+                      }
                       placeholder="Search customer by name, phone or code."
                       className="h-9 w-full rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] text-[#031C45] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                     />
@@ -463,6 +517,7 @@ export function NewSalePage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Items */}
         <section className="rounded-[12px] border border-[#D8E4F2] bg-white shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
@@ -521,7 +576,7 @@ export function NewSalePage() {
                 <tr className="bg-[#F8FAFC] text-[11.5px] font-medium uppercase tracking-wide text-[#62789A]">
                   <th className="px-3 py-2.5 w-10">#</th>
                   <th className="px-3 py-2.5 min-w-[180px]">Product / Description</th>
-                  <th className="px-3 py-2.5 min-w-[140px]">Size / Specification</th>
+                  <th className="px-3 py-2.5 min-w-[120px]">Unit</th>
                   <th className="px-3 py-2.5 w-24">HSN</th>
                   <th className="px-3 py-2.5 w-20">Qty</th>
                   <th className="px-3 py-2.5 w-28">Rate (₹)</th>
@@ -544,38 +599,34 @@ export function NewSalePage() {
                             updateItem(item.key, { productName: e.target.value, productId: undefined })
                             setActiveRowKey(item.key)
                             setProductQuery(e.target.value)
+                            productAnchor.current = e.currentTarget
+                            placeProductMenu(e.currentTarget)
                           }}
-                          onFocus={() => {
+                          onFocus={(e) => {
                             setActiveRowKey(item.key)
+                            productAnchor.current = e.currentTarget
+                            placeProductMenu(e.currentTarget)
                             if (item.productName) setProductQuery(item.productName)
                           }}
                           placeholder="Type or search product..."
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"
                         />
-                        {activeRowKey === item.key && productResults.length > 0 ? (
-                          <div className="absolute left-3 right-3 top-[calc(100%-2px)] z-20 max-h-40 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
-                            {productResults.map((p) => (
-                              <button
-                                key={p.id}
-                                type="button"
-                                className="flex w-full items-center justify-between px-3 py-2 text-left text-[12.5px] hover:bg-[#F5F9FF]"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => applyProduct(item.key, p)}
-                              >
-                                <span>{p.name}</span>
-                                <span className="tabular-nums text-[#62789A]">{formatMoney(p.selling_rate)}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
                       </td>
                       <td className="px-3 py-2">
-                        <input
-                          value={item.specification}
+                        <select
+                          value={productUnit(item.specification)}
                           onChange={(e) => updateItem(item.key, { specification: e.target.value })}
-                          placeholder={'e.g. 30" x 80", White'}
-                          className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"
-                        />
+                          className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px] outline-none focus:border-[#0878F9]"
+                        >
+                          {PRODUCT_UNITS.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          ))}
+                          {item.specification && !PRODUCT_UNITS.includes(item.specification) ? (
+                            <option value={item.specification}>{item.specification}</option>
+                          ) : null}
+                        </select>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -795,6 +846,31 @@ export function NewSalePage() {
           </Field>
         </div>
       </Modal>
+      {productMenu && activeRowKey && productResults.length > 0
+        ? createPortal(
+            <div
+              className="fixed z-[80] max-h-56 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg"
+              style={{ top: productMenu.top, left: productMenu.left, width: productMenu.width }}
+            >
+              {productResults.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[12.5px] hover:bg-[#F5F9FF]"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => applyProduct(activeRowKey, p)}
+                >
+                  <span>
+                    {p.name}
+                    <span className="ml-2 text-[11px] text-[#62789A]">{productUnit(p.unit)}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[#62789A]">{formatMoney(p.selling_rate)}</span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

@@ -1,3 +1,5 @@
+import { getMeta, queryOne, setMeta } from '../database'
+
 export type Role = 'owner' | 'manager' | 'cashier' | 'staff'
 
 export interface SessionUser {
@@ -77,12 +79,69 @@ export function hasPermission(user: SessionUser | null, permission: string): boo
   return user.permissions.includes(permission)
 }
 
+const SESSION_KEY = 'auth_session'
+
 let session: SessionState = {
   user: null,
   locked: false,
   hasPin: false,
   lastActivity: Date.now(),
   autoLockMinutes: 0,
+}
+
+function persistSession(): void {
+  try {
+    if (!session.user) {
+      setMeta(SESSION_KEY, '')
+      return
+    }
+    setMeta(
+      SESSION_KEY,
+      JSON.stringify({
+        userId: session.user.id,
+        companyId: session.user.companyId,
+        locked: session.locked,
+        autoLockMinutes: session.autoLockMinutes,
+      }),
+    )
+  } catch {
+    // Database is not open yet.
+  }
+}
+
+/** Restore the last sign-in after a refresh or restart. Sign out is the only clear. */
+export function restoreSession(): void {
+  try {
+    const raw = getMeta(SESSION_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw) as { userId?: string; companyId?: string; locked?: boolean; autoLockMinutes?: number }
+    if (!saved.userId || !saved.companyId) return
+    const row = queryOne<Record<string, unknown>>(
+      'SELECT id, company_id, email, name, role, permissions, pin_hash, pin_salt, is_active FROM users WHERE id = ? AND company_id = ?',
+      [saved.userId, saved.companyId],
+    )
+    if (!row || Number(row.is_active) !== 1) {
+      setMeta(SESSION_KEY, '')
+      return
+    }
+    const role = row.role as Role
+    session = {
+      user: {
+        id: String(row.id),
+        companyId: String(row.company_id),
+        email: String(row.email),
+        name: String(row.name),
+        role,
+        permissions: permissionsForRole(role, row.permissions as string | null),
+      },
+      locked: Boolean(saved.locked),
+      hasPin: Boolean(row.pin_hash && row.pin_salt),
+      lastActivity: Date.now(),
+      autoLockMinutes: Number(saved.autoLockMinutes) || 0,
+    }
+  } catch {
+    // Ignore a damaged session record and leave the user signed out.
+  }
 }
 
 export function getSession(): SessionState {
@@ -97,6 +156,7 @@ export function setSessionUser(user: SessionUser | null, hasPin = false): void {
     hasPin,
     lastActivity: Date.now(),
   }
+  persistSession()
 }
 
 export function touchSession(): void {
@@ -105,11 +165,13 @@ export function touchSession(): void {
 
 export function lockSession(): void {
   if (session.user) session.locked = true
+  persistSession()
 }
 
 export function unlockSession(): void {
   session.locked = false
   session.lastActivity = Date.now()
+  persistSession()
 }
 
 export function clearSession(): void {
@@ -120,10 +182,12 @@ export function clearSession(): void {
     lastActivity: Date.now(),
     autoLockMinutes: session.autoLockMinutes,
   }
+  persistSession()
 }
 
 export function setAutoLockMinutes(minutes: number): void {
   session.autoLockMinutes = minutes
+  persistSession()
 }
 
 export function shouldAutoLock(): boolean {

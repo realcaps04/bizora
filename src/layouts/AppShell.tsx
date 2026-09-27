@@ -83,7 +83,9 @@ export function AppShell() {
       path.startsWith('/sales/new') ||
       path.startsWith('/purchases/new') ||
       path.startsWith('/quotations/new') ||
-      path.startsWith('/products/new')
+      path.startsWith('/products/new') ||
+      path.startsWith('/products/bulk') ||
+      /\/products\/[^/]+\/edit$/.test(path)
     ) {
       return false
     }
@@ -103,7 +105,11 @@ export function AppShell() {
           ? '/quotations/new'
           : location.pathname === '/products/new'
             ? '/products/new'
-            : null
+            : location.pathname === '/products/bulk'
+              ? '/products/bulk'
+              : /\/products\/[^/]+\/edit$/.test(location.pathname)
+                ? location.pathname
+                : null
 
   useEffect(() => {
     if (!composeRouteKey) {
@@ -120,6 +126,12 @@ export function AppShell() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen))
   }, [sidebarOpen])
+
+  useEffect(() => {
+    const path = `${location.pathname}${location.search}`
+    if (path === '/' || path.startsWith('/login') || path.startsWith('/register')) return
+    localStorage.setItem('bizora.lastPath', path)
+  }, [location.pathname, location.search])
 
   function toggleSidebar() {
     setSidebarOpen((open) => !open)

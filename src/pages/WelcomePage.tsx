@@ -64,9 +64,9 @@ export function LockScreen() {
 const onboardingSteps = [
   {
     n: '1',
-    title: 'Add your first product',
-    description: 'Set up items with rates, tax and stock.',
-    to: '/products',
+    title: 'Add products for your business',
+    description: 'Review the product list for your company type and add it in bulk.',
+    to: '/products/bulk',
   },
   {
     n: '2',
