@@ -86,36 +86,44 @@ async function readBody(url: string): Promise<string> {
   return Buffer.concat(chunks).toString('utf8')
 }
 
-function currentOffer(): { current: string; latest: string } | null {
-  if (!pending) return null
-  return { current: app.getVersion(), latest: pending.version }
+export type UpdateCheck = {
+  current: string
+  latest: string
+  available: boolean
+  reachable: boolean
 }
 
-export async function checkForAppUpdate(): Promise<{ current: string; latest: string } | null> {
-  if (installing) return currentOffer()
+function currentOffer(reachable: boolean): UpdateCheck {
+  const current = app.getVersion()
+  if (!pending) return { current, latest: current, available: false, reachable }
+  return { current, latest: pending.version, available: true, reachable: true }
+}
+
+export async function checkForAppUpdate(): Promise<UpdateCheck> {
+  if (installing) return currentOffer(true)
   const current = app.getVersion()
   let body = ''
   try {
     body = await readBody(`https://api.github.com/repos/${REPO}/releases/latest`)
   } catch {
-    return currentOffer()
+    return currentOffer(false)
   }
-  if (!body) return currentOffer()
+  if (!body) return currentOffer(false)
   let release: Release
   try {
     release = JSON.parse(body) as Release
   } catch {
-    return currentOffer()
+    return currentOffer(false)
   }
   const latest = String(release.tag_name || '').replace(/^v/i, '')
   const asset = (release.assets || []).find((item) => /Bizora-Setup-.*\.exe$/i.test(item.name || ''))
   const url = asset?.browser_download_url || ''
   if (!latest || !url || !isNewer(latest, current)) {
     pending = null
-    return null
+    return { current, latest: latest || current, available: false, reachable: true }
   }
   pending = { version: latest, url }
-  return { current, latest }
+  return { current, latest, available: true, reachable: true }
 }
 
 export async function installAppUpdate(onProgress?: (percent: number) => void): Promise<{ version: string }> {

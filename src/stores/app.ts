@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import type { SessionUser } from '@/types'
 import { callApi } from '@/utils'
 
+export type AppUpdate = {
+  current: string
+  latest: string
+  available: boolean
+  reachable: boolean
+}
+
 interface AppState {
   ready: boolean
   hasCompany: boolean
@@ -10,6 +17,7 @@ interface AppState {
   hasPin: boolean
   user: SessionUser | null
   companyName: string | null
+  appUpdate: AppUpdate | null
   toast: { id: number; message: string; tone: 'success' | 'error' | 'info' } | null
   bootstrap: () => Promise<void>
   setSession: (data: {
@@ -21,6 +29,7 @@ interface AppState {
   showToast: (message: string, tone?: 'success' | 'error' | 'info') => void
   clearToast: () => void
   refreshCompany: () => Promise<void>
+  setAppUpdate: (update: AppUpdate) => void
 }
 
 let toastId = 0
@@ -33,6 +42,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   hasPin: false,
   user: null,
   companyName: null,
+  appUpdate: null,
   toast: null,
 
   bootstrap: async () => {
@@ -90,4 +100,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ companyName: null })
     }
   },
+
+  setAppUpdate: (update) => set({ appUpdate: update }),
 }))

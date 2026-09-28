@@ -108,6 +108,22 @@ textarea {
   border: 2px solid transparent;
 }
 
+@keyframes bizora-update-dot {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  70%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.bizora-update-dot {
+  animation: bizora-update-dot 1.4s ease-out infinite;
+}
+
 @keyframes bizora-tip {
   from {
     opacity: 0;

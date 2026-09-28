@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui'
+import { useAppStore } from '@/stores/app'
 import { callApi } from '@/utils'
 
 const DISMISS_KEY = 'bizora-update-dismissed'
@@ -14,6 +15,7 @@ function dismissedVersion(): string {
 }
 
 export function UpdatePrompt() {
+  const setAppUpdate = useAppStore((s) => s.setAppUpdate)
   const [offer, setOffer] = useState<{ current: string; latest: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [percent, setPercent] = useState(0)
@@ -29,8 +31,10 @@ export function UpdatePrompt() {
       checking = true
       try {
         const update = await callApi(() => window.bizora.checkForUpdate())
-        if (stopped || !update || update.latest === dismissedVersion()) return
-        setOffer(update)
+        if (stopped || !update) return
+        setAppUpdate(update)
+        if (!update.available || update.latest === dismissedVersion()) return
+        setOffer({ current: update.current, latest: update.latest })
       } catch {
         // No connection, or GitHub did not answer. The next online event retries.
       } finally {
@@ -47,7 +51,7 @@ export function UpdatePrompt() {
       window.clearInterval(timer)
       window.removeEventListener('online', onOnline)
     }
-  }, [busy])
+  }, [busy, setAppUpdate])
 
   useEffect(() => {
     if (!offer || !window.bizora.onUpdateProgress) return

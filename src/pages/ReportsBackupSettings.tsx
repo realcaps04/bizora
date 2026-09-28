@@ -466,6 +466,7 @@ export function SettingsPage() {
     { id: 'security', label: 'Security' },
     { id: 'backup', label: 'Backup' },
     { id: 'appearance', label: 'Appearance' },
+    { id: 'updates', label: 'Updates' },
     { id: 'audit', label: 'Audit Log' },
   ]
 
@@ -733,6 +734,8 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
+      {tab === 'updates' ? <UpdatesPanel /> : null}
+
       {tab === 'audit' ? <AuditPanel /> : null}
     </div>
   )
@@ -983,6 +986,86 @@ function GoogleDrivePanel() {
         </>
       ) : null}
     </div>
+  )
+}
+
+function UpdatesPanel() {
+  const appUpdate = useAppStore((s) => s.appUpdate)
+  const setAppUpdate = useAppStore((s) => s.setAppUpdate)
+  const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [percent, setPercent] = useState(0)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!busy || !window.bizora?.onUpdateProgress) return
+    return window.bizora.onUpdateProgress(setPercent)
+  }, [busy])
+
+  async function checkNow() {
+    if (!window.bizora?.checkForUpdate) return
+    setChecking(true)
+    setError('')
+    try {
+      const update = await callApi(() => window.bizora.checkForUpdate())
+      if (update) setAppUpdate(update)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check for updates.')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  async function install() {
+    setBusy(true)
+    setError('')
+    try {
+      await callApi(() => window.bizora.installUpdate())
+    } catch (err) {
+      setBusy(false)
+      setError(err instanceof Error ? err.message : 'The update could not be downloaded.')
+    }
+  }
+
+  const available = Boolean(appUpdate?.available)
+
+  return (
+    <Card className="max-w-xl space-y-3 p-5">
+      <div className="text-sm font-semibold">Updates</div>
+      {appUpdate ? (
+        <p className="text-sm text-ink">
+          This computer is running Bizora {appUpdate.current}.
+          {available ? ` Version ${appUpdate.latest} is ready to install.` : null}
+        </p>
+      ) : (
+        <p className="text-sm text-ink-muted">Checking for a newer version…</p>
+      )}
+      {available ? (
+        <p className="text-sm text-ink-muted">
+          The update installs from this app and then Bizora restarts. Your bills and records stay on this PC.
+        </p>
+      ) : appUpdate?.reachable ? (
+        <p className="text-sm text-ink-muted">Bizora is up to date.</p>
+      ) : appUpdate ? (
+        <p className="text-sm text-ink-muted">Connect to the internet to check for a newer version.</p>
+      ) : null}
+      {busy ? (
+        <p className="text-sm font-medium">
+          Downloading the latest version{percent > 0 ? `… ${percent}%` : '…'}
+        </p>
+      ) : null}
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      <div className="flex gap-2">
+        {available ? (
+          <Button disabled={busy} onClick={() => void install()}>
+            Update to latest
+          </Button>
+        ) : null}
+        <Button variant="outline" disabled={busy || checking} onClick={() => void checkNow()}>
+          {checking ? 'Checking…' : 'Check now'}
+        </Button>
+      </div>
+    </Card>
   )
 }
 

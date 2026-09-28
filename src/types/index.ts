@@ -73,7 +73,9 @@ export interface Invoice {
 
 export interface BizoraApi {
   getState: () => Promise<ApiResult<unknown>>
-  checkForUpdate: () => Promise<ApiResult<{ current: string; latest: string } | null>>
+  checkForUpdate: () => Promise<
+    ApiResult<{ current: string; latest: string; available: boolean; reachable: boolean }>
+  >
   installUpdate: () => Promise<ApiResult<{ version: string }>>
   onUpdateProgress?: (cb: (percent: number) => void) => () => void
   lock: () => Promise<ApiResult<unknown>>

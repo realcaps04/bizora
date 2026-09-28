@@ -420,6 +420,21 @@ function CollapsedTip({ label, className, children }: { label: string; className
   )
 }
 
+function NavIcon({ item, updateReady }: { item: NavItem; updateReady: boolean }) {
+  const Icon = item.icon
+  return (
+    <span className="relative inline-flex shrink-0">
+      <Icon size={15} />
+      {updateReady ? (
+        <span className="absolute -right-1.5 -top-1.5 flex h-2 w-2" aria-hidden>
+          <span className="bizora-update-dot absolute inline-flex h-full w-full rounded-full bg-emerald-400" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 function NavGroup({
   items,
   collapsed,
@@ -427,6 +442,7 @@ function NavGroup({
   items: NavItem[]
   collapsed: boolean
 }) {
+  const updateReady = useAppStore((s) => Boolean(s.appUpdate?.available))
   return (
     <div className="space-y-0.5">
       {items.map((item) => (
@@ -444,7 +460,7 @@ function NavGroup({
                   )
                 }
               >
-                <item.icon size={15} />
+                <NavIcon item={item} updateReady={item.to === '/settings' && updateReady} />
               </NavLink>
             </CollapsedTip>
           ) : (
@@ -458,7 +474,7 @@ function NavGroup({
                 )
               }
             >
-              <item.icon size={15} />
+              <NavIcon item={item} updateReady={item.to === '/settings' && updateReady} />
               {item.label}
             </NavLink>
           )}
