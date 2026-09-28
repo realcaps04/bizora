@@ -347,6 +347,7 @@ export function createPurchase(input: {
     rate: number
     discount?: number
     taxRate?: number
+    amount?: number
   }[]
   notes?: string
 }) {
@@ -359,7 +360,13 @@ export function createPurchase(input: {
     const discount = Number(item.discount) || 0
     const base = Math.max(0, item.qty * item.rate - discount)
     const tax = (base * (item.taxRate || 0)) / 100
-    return { ...item, discount, amount: round2(base + tax), tax: round2(tax), base: round2(base) }
+    const typed = Number(item.amount)
+    const hasTyped = Number.isFinite(typed) && item.amount != null
+    const amount = hasTyped ? round2(Math.max(0, typed)) : round2(base + tax)
+    const factor = 1 + (item.taxRate || 0) / 100
+    const taxValue = hasTyped ? round2(amount - (factor > 0 ? amount / factor : amount)) : round2(tax)
+    const baseValue = hasTyped ? round2(amount - taxValue) : round2(base)
+    return { ...item, discount, amount, tax: taxValue, base: baseValue }
   })
   const subtotal = round2(calcs.reduce((s, i) => s + i.qty * i.rate, 0))
   const taxAmount = round2(calcs.reduce((s, i) => s + i.tax, 0))

@@ -17,6 +17,7 @@ interface LineItem {
   rate: number
   discount: number
   taxRate: number
+  amountOverride?: number
 }
 
 interface SupplierOption {
@@ -35,8 +36,14 @@ function round2(n: number) {
   return Math.round(n * 100) / 100
 }
 
-function lineAmount(item: Pick<LineItem, 'qty' | 'rate' | 'discount' | 'taxRate'>) {
+function lineAmount(item: Pick<LineItem, 'qty' | 'rate' | 'discount' | 'taxRate' | 'amountOverride'>) {
+  if (item.amountOverride != null && Number.isFinite(item.amountOverride)) return round2(Math.max(0, item.amountOverride))
   return round2(Math.max(0, item.qty * item.rate - item.discount) * (1 + item.taxRate / 100))
+}
+
+function formatAmountInput(n: number) {
+  const rounded = round2(n)
+  return String(rounded)
 }
 
 function rateFromAmount(amount: number, qty: number, discount: number, taxRate: number) {
@@ -81,6 +88,7 @@ export function NewPurchasePage() {
   const productSearchRef = useRef<HTMLInputElement>(null)
   const productAnchor = useRef<HTMLElement | null>(null)
   const [productMenu, setProductMenu] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [amountDraft, setAmountDraft] = useState<Record<string, string>>({})
 
   function placeProductMenu(el?: HTMLElement | null) {
     const node = el ?? productAnchor.current
@@ -185,6 +193,12 @@ export function NewPurchasePage() {
     const subtotal = round2(filledItems.reduce((s, i) => s + i.qty * i.rate, 0))
     const discount = round2(filledItems.reduce((s, i) => s + i.discount, 0))
     const afterLines = filledItems.map((i) => {
+      if (i.amountOverride != null && Number.isFinite(i.amountOverride)) {
+        const gross = round2(Math.max(0, i.amountOverride))
+        const factor = 1 + i.taxRate / 100
+        const base = factor > 0 ? gross / factor : gross
+        return { base, tax: gross - base, taxRate: i.taxRate }
+      }
       const base = Math.max(0, i.qty * i.rate - i.discount)
       const tax = (base * i.taxRate) / 100
       return { base, tax, taxRate: i.taxRate }
@@ -215,7 +229,17 @@ export function NewPurchasePage() {
   }
 
   function updateItem(key: string, patch: Partial<LineItem>) {
-    setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)))
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.key !== key) return i
+        const next = { ...i, ...patch }
+        const editsSource =
+          !('amountOverride' in patch) &&
+          ('qty' in patch || 'rate' in patch || 'discount' in patch || 'taxRate' in patch)
+        if (editsSource) delete next.amountOverride
+        return next
+      }),
+    )
   }
 
   function applyProduct(key: string, p: Product) {
@@ -327,6 +351,7 @@ export function NewPurchasePage() {
             rate: i.rate,
             discount: i.discount,
             taxRate: i.taxRate,
+            amount: lineAmount(i),
           })),
         }),
       )
@@ -615,16 +640,27 @@ export function NewPurchasePage() {
                       </td>
                       <td className="px-3 py-2">
                         <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={amount}
+                          type="text"
+                          inputMode="decimal"
+                          value={amountDraft[item.key] ?? formatAmountInput(amount)}
                           onChange={(e) => {
-                            const nextAmount = Number(e.target.value) || 0
+                            const raw = e.target.value.trim()
+                            if (raw !== '' && !/^\d*\.?\d{0,2}$/.test(raw)) return
+                            setAmountDraft((prev) => ({ ...prev, [item.key]: raw }))
+                            const nextAmount = raw === '' || raw === '.' ? 0 : Number(raw)
+                            if (!Number.isFinite(nextAmount)) return
                             updateItem(item.key, {
+                              amountOverride: nextAmount,
                               rate: rateFromAmount(nextAmount, item.qty, item.discount, item.taxRate),
                             })
                           }}
+                          onBlur={() =>
+                            setAmountDraft((prev) => {
+                              const next = { ...prev }
+                              delete next[item.key]
+                              return next
+                            })
+                          }
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-right text-[13px] font-medium tabular-nums text-[#031C45] outline-none focus:border-[#0878F9]"
                         />
                       </td>
