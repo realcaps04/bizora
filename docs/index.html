@@ -5,26 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bizora | Billing that stays on your computer</title>
   <meta name="description" content="Bizora is a Windows desktop app for GST invoices, quotations, stock, customers, purchases and reports. Download the installer. The app does not run in the browser." />
+  <meta property="og:title" content="Bizora | Billing that stays on your computer" />
+  <meta property="og:description" content="GST invoices, quotations, stock and reports on your Windows PC. Offline. No monthly fee." />
+  <meta property="og:image" content="shots/dashboard.png" />
   <link rel="icon" href="Bizora_applogo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --navy: #062454;
+      --navy: #031C45;
+      --navy-2: #062454;
       --blue: #0878F9;
       --blue-deep: #0666d6;
       --ink: #0A2147;
-      --muted: #607493;
-      --line: #DCE6F2;
-      --bg: #F6F9FD;
+      --muted: #5b7394;
+      --line: #dce6f2;
+      --bg: #f4f8fc;
       --soft: #EAF4FF;
-      --sidebar: #031C45;
-      --shadow: 0 10px 30px rgba(6, 36, 84, 0.06);
-      --max: 1200px;
+      --max: 1160px;
     }
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 80px;
+      overflow-x: clip;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    html::-webkit-scrollbar { width: 0; height: 0; }
     body {
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -32,819 +41,500 @@
       background: #fff;
       font-size: 16px;
       line-height: 1.6;
+      overflow-x: clip;
       -webkit-font-smoothing: antialiased;
     }
     img { max-width: 100%; display: block; }
     a { color: inherit; text-decoration: none; }
-    button, input { font-family: inherit; }
-    :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-    ::selection { background: #d7e9ff; }
-    [id] { scroll-margin-top: 84px; }
+    button { font-family: inherit; }
+    :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
     .wrap { width: min(var(--max), calc(100% - 48px)); margin: 0 auto; }
-    .eyebrow {
-      margin: 0 0 10px;
-      color: var(--blue);
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-    h1, h2 { margin: 0; color: var(--navy); font-weight: 800; letter-spacing: -0.034em; line-height: 1.08; }
-    h1 { font-size: clamp(42px, 5vw, 60px); }
-    h1 em { font-style: normal; color: var(--blue); }
-    h2 { font-size: clamp(30px, 3.4vw, 42px); }
-    h3 { margin: 0; color: var(--navy); font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
-    .lede { margin: 14px 0 0; max-width: 460px; color: var(--muted); font-size: 16.5px; line-height: 1.65; }
-    .section-copy { margin: 12px 0 0; max-width: 620px; color: var(--muted); font-size: 16px; }
-    .band { padding: 88px 0; }
-    .band.alt { background: var(--bg); }
-    .center { text-align: center; }
-    .center .section-copy, .center .lede { margin-left: auto; margin-right: auto; }
 
     header {
-      position: sticky;
-      top: 0;
-      z-index: 40;
-      height: 68px;
-      background: rgba(255, 255, 255, 0.78);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid rgba(220, 230, 242, 0.95);
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 50;
+      height: 72px;
+      background: rgba(3, 28, 69, 0.55);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      transition: background .3s ease, border-color .3s ease;
     }
-    header.scrolled { background: rgba(255, 255, 255, 0.94); }
-    .nav { height: 68px; display: flex; align-items: center; gap: 28px; }
-    .brand { display: flex; align-items: center; gap: 10px; color: var(--navy); font-weight: 700; letter-spacing: -0.03em; font-size: 18px; }
-    .brand img { width: 36px; height: 36px; }
-    .nav-links { margin-left: auto; display: flex; align-items: center; gap: 22px; }
-    .nav-links a:not(.btn) { color: #3e5678; font-size: 14px; font-weight: 500; }
-    .nav-links a:not(.btn):hover { color: var(--navy); }
-    .menu {
-      display: none;
-      margin-left: 8px;
-      width: 40px; height: 40px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
+    header.light {
       background: #fff;
-      padding: 0;
-      cursor: pointer;
+      border-bottom-color: var(--line);
+      backdrop-filter: none;
     }
-    .menu span { display: block; width: 16px; height: 1.5px; margin: 4px auto; background: var(--navy); }
+    header.light .brand,
+    header.light .nav-links a { color: var(--navy); }
+    header.light .nav-links a:hover { color: var(--blue); }
+    header.light .menu span { background: var(--navy); }
+    header.light .menu { border-color: var(--line); }
+    .nav { height: 72px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; letter-spacing: -0.03em; font-size: 18px; justify-self: start; }
+    .brand img { width: 34px; height: 34px; border-radius: 8px; }
+    .nav-links { display: flex; align-items: center; justify-content: center; gap: 28px; }
+    .nav-links a { color: rgba(255,255,255,.82); font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: #fff; }
+    .nav-end { justify-self: end; display: flex; align-items: center; gap: 8px; }
+    .menu {
+      display: none; width: 40px; height: 40px; border: 1px solid rgba(255,255,255,.2);
+      border-radius: 10px; background: transparent; padding: 0; cursor: pointer;
+    }
+    .menu span { display: block; width: 16px; height: 1.5px; margin: 4px auto; background: #fff; }
 
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      height: 44px;
-      padding: 0 16px;
-      border-radius: 10px;
-      border: 1px solid transparent;
-      background: var(--blue);
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      height: 46px; padding: 0 18px; border-radius: 12px; border: 1px solid transparent;
+      background: var(--blue); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: transform .2s ease, background .2s ease, box-shadow .2s ease;
     }
-    .btn:hover { background: var(--blue-deep); }
-    .btn svg { width: 14px; height: 14px; flex: none; }
-    .btn-ghost { background: #fff; color: var(--navy); border-color: var(--line); }
-    .btn-ghost:hover { background: var(--bg); }
-    .btn-sm { height: 40px; }
+    .btn:hover { background: var(--blue-deep); transform: translateY(-1px); box-shadow: 0 10px 24px rgba(8,120,249,.28); }
+    .btn svg { width: 14px; height: 14px; }
+    .btn-ghost { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.16); }
+    .btn-ghost:hover { background: rgba(255,255,255,.16); box-shadow: none; }
+    .btn-navy { background: var(--navy); }
+    .btn-navy:hover { background: #052a63; }
+    .btn-sm { height: 40px; padding: 0 14px; }
     .nav-cta { display: none; }
-    .short { display: none; }
-    .text-link { color: var(--blue); font-size: 14px; font-weight: 600; }
-    .text-link:hover { text-decoration: underline; }
 
     .hero {
       position: relative;
+      min-height: 100vh;
+      padding: 128px 0 0;
       overflow: hidden;
-      padding: 64px 0 28px;
-      background:
-        radial-gradient(720px 380px at 88% 18%, rgba(8, 120, 249, 0.08), transparent 62%),
-        linear-gradient(180deg, #fff 0%, #f8fbfe 100%);
+      color: #fff;
+      background: var(--navy);
     }
-    .hero-grid { display: grid; grid-template-columns: minmax(280px, 0.86fr) 1.14fr; gap: 28px; align-items: center; }
-    .hero-grid > *, .split > *, .pair > *, .navy-grid > *, .cta > *, .row2 > *, .grid-3 > * { min-width: 0; }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none;
+      animation: drift 18s ease-in-out infinite;
+    }
+    .orb.a { width: 520px; height: 520px; background: rgba(8,120,249,.42); top: -160px; right: -80px; }
+    .orb.b { width: 360px; height: 360px; background: rgba(59,155,255,.22); bottom: 10%; left: -120px; animation-delay: -6s; }
+    .orb.c { width: 240px; height: 240px; background: rgba(255,255,255,.08); top: 40%; right: 30%; animation-delay: -11s; }
+    @keyframes drift {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-40px, 28px) scale(1.08); }
+    }
+    .hero-copy { position: relative; max-width: 760px; margin: 0 auto; text-align: center; }
     .pill {
-      display: inline-flex;
-      align-items: center;
-      height: 28px;
-      padding: 0 10px;
-      margin-bottom: 16px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: #fff;
-      color: var(--navy);
-      font-size: 11px;
-      font-weight: 650;
-      letter-spacing: 0.08em;
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 30px; padding: 0 12px; margin-bottom: 18px;
+      border: 1px solid rgba(255,255,255,.14); border-radius: 999px;
+      background: rgba(255,255,255,.06); color: #cfe3ff;
+      font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
     }
-    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
-    .meta { margin: 14px 0 0; color: var(--muted); font-size: 13px; }
-    .trust { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 22px 0 0; padding: 0; list-style: none; }
-    .trust li { display: flex; align-items: center; gap: 8px; color: var(--navy); font-size: 13.5px; font-weight: 600; }
-    .trust i { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); display: block; }
-    .hero-visual { position: relative; min-height: 460px; }
-    .laptop { width: 112%; filter: drop-shadow(0 28px 40px rgba(6, 36, 84, 0.16)); }
-    .lid { background: #10203a; border-radius: 16px 16px 0 0; padding: 10px 10px 0; border: 1px solid #1b3358; }
-    .cam { width: 7px; height: 7px; border-radius: 50%; background: #31486e; margin: 0 auto 8px; }
-    .base { height: 14px; margin: 0 9%; background: linear-gradient(#d7e0ec, #c5d0e0); border-radius: 0 0 12px 12px; position: relative; }
-    .base:after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); top: 0; width: 16%; height: 6px; background: #b7c4d6; border-radius: 0 0 6px 6px; }
-    .shot-note { margin: 10px 0 0; color: var(--muted); font-size: 12px; text-align: right; }
-
-    .strip-wrap { padding: 8px 0 72px; background: linear-gradient(#f8fbfe, #fff); }
-    .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
-    .strip article, .biz article, .mini-note, .quote, .price, .why article {
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-    }
-    .strip article { padding: 16px 14px 18px; }
-    .ico {
-      width: 36px; height: 36px; border-radius: 8px;
-      display: grid; place-items: center;
-      background: var(--soft); color: var(--blue); margin-bottom: 12px;
-    }
-    .ico svg, .biz svg { width: 18px; height: 18px; }
-    .strip h3 { font-size: 14px; font-weight: 700; }
-    .strip p, .biz p, .mini-note p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
-
-    .head-row { max-width: 680px; margin-bottom: 28px; }
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-    .feat { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 12px 16px; box-shadow: var(--shadow); }
-    .feat h3 { margin-top: 12px; font-size: 16px; }
-    .feat p { margin: 6px 0 10px; color: var(--muted); font-size: 13.5px; line-height: 1.5; min-height: 40px; }
-    .split { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: center; }
-    .split.flip { grid-template-columns: 0.85fr 1.15fr; }
-    .checks { list-style: none; padding: 0; margin: 18px 0 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
-    .checks li { display: flex; gap: 8px; align-items: flex-start; font-size: 14.5px; color: var(--ink); }
-    .checks svg { width: 16px; height: 16px; color: var(--blue); flex: none; margin-top: 3px; }
-
-    .notes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
-    .mini-note { padding: 16px; }
-    .mini-note strong { display: block; color: var(--navy); font-size: 14px; }
-    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .subhead { margin: 0 0 10px; font-size: 15px; color: var(--navy); }
-
-    .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-    .filters span, .tabs button {
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--muted);
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 4px 10px;
-    }
-    .filters .on, .tabs button.on { background: var(--soft); color: var(--blue); border-color: #c5ddfb; }
-
-    .paper {
-      background: #fff;
-      border: 1px solid #C9D4E2;
-      border-radius: 12px;
-      box-shadow: var(--shadow);
-      color: #0F2744;
-      overflow: hidden;
-    }
-    .paper-title { margin: 0; padding: 12px; text-align: center; border-bottom: 1px solid #C9D4E2; color: #0B3A7A; letter-spacing: 0.06em; font-size: 16px; }
-    .paper-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; }
-    .paper-grid > div { padding: 12px 14px; border-bottom: 1px solid #C9D4E2; }
-    .paper-grid > div + div { border-left: 1px solid #C9D4E2; }
-    .paper .k { color: #4A5D78; font-size: 11px; }
-    .paper strong { font-size: 13px; }
-    .paper .foot { display: grid; grid-template-columns: 1fr 150px; gap: 12px; padding: 12px 14px; align-items: end; }
-
-    .upi-band {
-      background: linear-gradient(180deg, #f4f8ff 0%, #eaf3fd 100%);
-    }
-    .pay-card {
-      display: grid;
-      grid-template-columns: 1fr 180px;
-      gap: 16px;
-      align-items: center;
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 16px;
-    }
-    .qr { width: 148px; height: 148px; display: block; }
-    .amount { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: var(--navy); }
-
-    .navy-band { background: #031A42; color: #fff; padding: 88px 0; }
-    .navy-band h2, .navy-band .eyebrow { color: #fff; }
-    .navy-band .eyebrow { color: #8ebcff; }
-    .navy-band .section-copy { color: #c5d4ea; }
-    .navy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: center; }
-    .navy-cards { display: grid; gap: 12px; margin-top: 22px; }
-    .navy-cards article { border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px 18px; background: rgba(255,255,255,0.03); }
-    .navy-cards h3 { color: #fff; font-size: 16px; }
-    .navy-cards p { margin: 4px 0 0; color: #c5d4ea; font-size: 14px; }
-
-    .timeline { margin-top: 16px; border-left: 1px solid var(--line); padding-left: 16px; }
-    .timeline div { margin: 0 0 14px; }
-    .timeline strong { display: block; font-size: 14px; color: var(--navy); }
-    .timeline span { color: var(--muted); font-size: 13px; }
-
-    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 36px; position: relative; }
-    .steps:before {
-      content: "";
-      position: absolute;
-      top: 18px; left: 8%; right: 8%;
-      height: 1px; background: var(--line);
-    }
-    .step { position: relative; }
-    .num {
-      width: 36px; height: 36px; border-radius: 50%;
-      display: grid; place-items: center;
-      background: var(--blue); color: #fff;
-      font-weight: 700; font-size: 13px;
+    .pill i { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.18); animation: pulse 2s ease infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(52,211,153,0); } }
+    h1, h2 { margin: 0; letter-spacing: -0.04em; line-height: 1.05; font-weight: 800; }
+    h1 { font-size: clamp(40px, 6vw, 68px); }
+    h1 em { font-style: normal; background: linear-gradient(90deg, #7ec2ff, #0878F9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    h2 { font-size: clamp(28px, 3.6vw, 44px); color: var(--navy); }
+    .lede { margin: 18px auto 0; max-width: 620px; color: #b7c7de; font-size: 18px; }
+    .hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 28px; }
+    .meta { margin: 14px 0 0; color: #8ea3c2; font-size: 13px; }
+    .trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; margin: 22px 0 0; padding: 0; list-style: none; }
+    .trust li { color: #d7e4f7; font-size: 13.5px; font-weight: 600; }
+    .hero-shot {
       position: relative;
+      width: min(1080px, calc(100% - 48px));
+      margin: 56px auto 0;
+      border-radius: 16px 16px 0 0;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.12);
+      border-bottom: 0;
+      box-shadow: 0 40px 80px rgba(0,0,0,.35);
+      animation: float 7s ease-in-out infinite;
     }
-    .step h3 { margin: 14px 0 6px; }
+    .hero-shot img { width: 100%; }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .band { padding: 96px 0; }
+    .band.alt { background: var(--bg); }
+    .center { text-align: center; }
+    .center .copy { margin-left: auto; margin-right: auto; }
+    .eyebrow { margin: 0 0 10px; color: var(--blue); font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    .copy { margin: 12px 0 0; max-width: 560px; color: var(--muted); font-size: 16.5px; }
+
+    .stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+      margin-top: -1px; padding: 28px 0 8px; background: #fff;
+      border-top: 1px solid var(--line);
+    }
+    .stats article { text-align: center; padding: 8px; }
+    .stats b { display: block; font-size: 22px; color: var(--navy); letter-spacing: -.03em; }
+    .stats span { color: var(--muted); font-size: 13px; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; }
+    .feat {
+      background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 24px;
+      transition: transform .35s ease, box-shadow .35s ease;
+    }
+    .feat:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(6,36,84,.08); }
+    .ico {
+      width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+      background: var(--soft); color: var(--blue); margin-bottom: 16px;
+    }
+    .ico svg { width: 20px; height: 20px; }
+    .feat h3 { margin: 0; font-size: 17px; color: var(--navy); }
+    .feat p { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; }
+
+    .split { display: grid; grid-template-columns: .92fr 1.08fr; gap: 56px; align-items: center; }
+    .split.flip { grid-template-columns: 1.08fr .92fr; }
+    .checks { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; }
+    .checks li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; }
+    .checks svg { width: 18px; height: 18px; color: var(--blue); flex: none; margin-top: 2px; }
+    .frame {
+      border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
+      box-shadow: 0 24px 60px rgba(6,36,84,.12);
+    }
+    .frame img { width: 100%; }
+
+    .gallery { margin-top: 36px; }
+    .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 22px; }
+    .tabs button {
+      height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line);
+      background: #fff; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: .2s ease;
+    }
+    .tabs button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .shot-stage {
+      position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+      box-shadow: 0 30px 70px rgba(6,36,84,.12); background: #f3f4f6; aspect-ratio: 1600 / 960;
+    }
+    .shot-stage img {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: top center;
+      background: #f3f4f6; opacity: 0; transition: opacity .45s ease;
+    }
+    .shot-stage img.on { opacity: 1; }
+
+    .navy { background: var(--navy); color: #fff; padding: 96px 0; }
+    .navy h2 { color: #fff; }
+    .navy .eyebrow { color: #8ebcff; }
+    .navy .copy { color: #b7c7de; }
+    .navy-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 36px; }
+    .navy-grid article { border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 22px; background: rgba(255,255,255,.04); }
+    .navy-grid h3 { margin: 0; color: #fff; font-size: 16px; }
+    .navy-grid p { margin: 8px 0 0; color: #b7c7de; font-size: 14.5px; }
+
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 40px; }
+    .num {
+      width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--blue); color: #fff; font-weight: 700; font-size: 13px;
+    }
+    .step h3 { margin: 14px 0 6px; font-size: 16px; color: var(--navy); }
     .step p { margin: 0; color: var(--muted); font-size: 14px; }
 
-    .biz { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-top: 28px; }
-    .biz article { padding: 18px 14px; }
-    .biz h3 { font-size: 14px; margin-top: 10px; }
-    .cols4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 28px; }
-    .why article { padding: 18px; }
-    .why h3 { font-size: 16px; margin-bottom: 8px; }
-    .why p, .why li { color: var(--muted); font-size: 14px; line-height: 1.5; }
-    .why ul { margin: 0; padding: 0; list-style: none; }
-    .why li { display: flex; gap: 8px; align-items: center; margin-top: 7px; color: var(--ink); }
-    .why li svg { width: 14px; height: 14px; color: var(--blue); }
+    .biz { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 32px; }
+    .biz article { border: 1px solid var(--line); border-radius: 14px; padding: 18px; background: #fff; }
+    .biz h3 { margin: 0 0 4px; font-size: 15px; color: var(--navy); }
+    .biz p { margin: 0; color: var(--muted); font-size: 13.5px; }
 
-    .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 14px; }
-    .tabs button { cursor: pointer; height: 32px; }
-    .film-bleed { width: 100%; max-width: 100%; overflow: hidden; }
-    .film { display: flex; width: 100%; max-width: 100%; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 6px 24px 18px max(24px, calc((100% - 1200px) / 2)); scrollbar-width: thin; }
-    .film figure { flex: 0 0 min(680px, 86vw); scroll-snap-align: start; margin: 0; }
-    .film figcaption { margin-top: 8px; font-size: 13px; font-weight: 650; color: var(--navy); }
+    .price {
+      max-width: 480px; margin: 32px auto 0; padding: 32px; text-align: left;
+      background: #fff; border: 1px solid var(--line); border-radius: 20px;
+      box-shadow: 0 18px 50px rgba(6,36,84,.06);
+    }
+    .price h3 { margin: 0; font-size: 18px; color: var(--navy); }
+    .zero { margin: 8px 0 4px; font-size: 44px; font-weight: 800; letter-spacing: -.04em; color: var(--navy); }
+    .zero span { font-size: 16px; font-weight: 600; color: var(--muted); }
+    .price ul { margin: 14px 0 22px; padding: 0; list-style: none; color: var(--muted); font-size: 14.5px; }
+    .price li { padding: 6px 0 6px 18px; position: relative; }
+    .price li:before { content: ""; position: absolute; left: 0; top: 13px; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
 
-    .quotes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 28px; }
-    .quote { padding: 20px; }
-    .quote p { margin: 0 0 16px; color: var(--ink); font-size: 15px; line-height: 1.55; }
-    .who { display: flex; gap: 10px; align-items: center; }
-    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--soft); color: var(--blue); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
-    .who strong { display: block; font-size: 14px; color: var(--navy); }
-    .who span { color: var(--muted); font-size: 12.5px; }
-
-    .faq { max-width: 760px; margin: 28px auto 0; border-top: 1px solid var(--line); }
+    .faq { max-width: 760px; margin: 32px auto 0; border-top: 1px solid var(--line); }
     .faq-q {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      align-items: center;
-      padding: 16px 0;
-      background: none;
-      border: 0;
-      border-bottom: 1px solid var(--line);
-      color: var(--navy);
-      font-size: 15.5px;
-      font-weight: 600;
-      text-align: left;
-      cursor: pointer;
+      width: 100%; display: flex; justify-content: space-between; gap: 16px; align-items: center;
+      padding: 18px 0; background: none; border: 0; border-bottom: 1px solid var(--line);
+      color: var(--navy); font-size: 16px; font-weight: 600; text-align: left; cursor: pointer;
     }
     .faq-a { margin: 0; padding: 0 0 16px; color: var(--muted); font-size: 14.5px; }
     .faq-a[hidden] { display: none; }
     .mark { width: 16px; height: 16px; position: relative; flex: none; }
-    .mark:before, .mark:after { content: ""; position: absolute; background: var(--blue); left: 0; right: 0; top: 7px; height: 1.5px; }
+    .mark:before, .mark:after { content: ""; position: absolute; background: var(--blue); left: 0; right: 0; top: 7px; height: 1.5px; transition: transform .2s ease; }
     .mark:after { transform: rotate(90deg); }
     .faq-q[aria-expanded="true"] .mark:after { transform: none; }
-    .faq-q[aria-expanded="true"] { border-bottom-color: transparent; }
 
-    .price { max-width: 560px; margin: 28px auto 0; padding: 28px; text-align: left; }
-    .price h3 { font-size: 22px; }
-    .price .zero { margin: 8px 0; font-size: 40px; font-weight: 800; letter-spacing: -0.04em; color: var(--navy); }
-    .price .zero span { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
-    .price ul { margin: 12px 0 18px; padding: 0; list-style: none; color: var(--muted); font-size: 14px; }
-    .price li { padding: 4px 0 4px 16px; position: relative; }
-    .price li:before { content: ""; position: absolute; left: 0; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
-
-    .cta-wrap { padding: 24px 0 88px; background: #fff; }
     .cta {
-      display: grid;
-      grid-template-columns: 1.3fr 0.7fr;
-      gap: 24px;
-      align-items: center;
-      background: var(--blue);
-      color: #fff;
-      border-radius: 20px;
-      padding: 42px 42px 42px 48px;
-      overflow: hidden;
+      background: linear-gradient(180deg, #0878F9, #0660d0);
+      color: #fff; border-radius: 24px; padding: 56px 48px; text-align: center;
+      box-shadow: 0 30px 70px rgba(8,120,249,.28);
     }
-    .cta h2 { color: #fff; font-size: clamp(30px, 3vw, 40px); }
-    .cta p { margin: 10px 0 0; color: rgba(255,255,255,0.88); max-width: 520px; }
-    .cta .btn { background: #fff; color: var(--navy); margin-top: 20px; }
+    .cta h2 { color: #fff; }
+    .cta p { margin: 12px auto 0; max-width: 520px; color: rgba(255,255,255,.9); }
+    .cta .btn { background: #fff; color: var(--navy); margin-top: 24px; }
     .cta .btn:hover { background: #f3f7fc; }
-    .cta .meta { color: rgba(255,255,255,0.8); }
-    .cta .laptop { width: 118%; }
+    .cta .meta { color: rgba(255,255,255,.8); }
 
-    .legal { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; padding-top: 28px; }
-    .legal h2 { font-size: 16px; }
-    .legal p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
-
-    footer { border-top: 1px solid var(--line); padding: 42px 0 24px; background: #fff; }
-    .foot-grid { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 24px; }
-    .tag { margin: 10px 0 0; color: var(--muted); font-size: 14px; max-width: 240px; }
-    footer h3 { font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: 650; margin-bottom: 10px; }
+    footer { border-top: 1px solid var(--line); padding: 48px 0 24px; background: #fff; }
+    .foot-grid { display: grid; grid-template-columns: 1.5fr repeat(3, 1fr); gap: 24px; }
+    .tag { margin: 10px 0 0; color: var(--muted); font-size: 14px; max-width: 260px; }
+    footer h3 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
     footer ul { list-style: none; margin: 0; padding: 0; }
-    footer li { margin: 7px 0; }
+    footer li { margin: 8px 0; }
     footer li a { color: var(--ink); font-size: 14px; }
     footer li a:hover { color: var(--blue); }
-    .subfoot { display: flex; justify-content: space-between; gap: 12px; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .subfoot { display: flex; justify-content: space-between; gap: 12px; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 
-    .reveal { opacity: 0; transform: translateY(12px); animation: rise 0.7s ease forwards; }
-    .reveal.d1 { animation-delay: 0.05s; }
-    .reveal.d2 { animation-delay: 0.1s; }
-    .reveal.d3 { animation-delay: 0.16s; }
+    .reveal { opacity: 0; transform: translateY(22px); animation: rise .8s cubic-bezier(.2,.7,.2,1) forwards; }
+    .d1 { animation-delay: .08s; }
+    .d2 { animation-delay: .16s; }
+    .d3 { animation-delay: .28s; }
+    .inview { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
+    .inview.show { opacity: 1; transform: none; }
     @keyframes rise { to { opacity: 1; transform: none; } }
     @media (prefers-reduced-motion: reduce) {
-      .reveal { animation: none; opacity: 1; transform: none; }
+      .reveal, .inview, .hero-shot, .orb { animation: none !important; opacity: 1; transform: none; }
       html { scroll-behavior: auto; }
     }
 
-    .app {
-      display: flex;
-      height: 100%;
-      min-height: 210px;
-      background: #f3f4f6;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      overflow: hidden;
-      color: #111827;
-      font-size: 11px;
-      line-height: 1.35;
-      text-align: left;
+    @media (max-width: 960px) {
+      .split, .split.flip, .navy-grid, .steps, .biz, .stats, .foot-grid { grid-template-columns: 1fr; }
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+      .hero-shot { width: calc(100% - 32px); }
     }
-    .app.mini { height: 210px; }
-    .app.mini .sb a { height: 16px; }
-    .app.mini .sb svg { width: 12px; height: 12px; }
-    .app.mini .sb img { width: 16px; height: 16px; margin-bottom: 4px; }
-    .app.mid { height: 430px; }
-    .app.tall { height: 460px; }
-    .sb {
-      width: 42px;
-      flex: none;
-      background: var(--sidebar);
-      color: #94a3b8;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 8px 6px;
-    }
-    .app.wide .sb { width: 150px; }
-    .sb img { width: 22px; height: 22px; margin: 0 auto 6px; }
-    .app.wide .sb img { margin: 2px 0 4px 4px; }
-    .sb .co { display: none; padding: 0 6px 8px; }
-    .app.wide .sb .co { display: block; }
-    .sb .co b { display: block; color: #fff; font-size: 12px; }
-    .sb .co small { color: #94a3b8; font-size: 10px; }
-    .sb a {
-      display: flex; align-items: center; gap: 8px;
-      height: 26px; border-radius: 6px; color: #94a3b8; padding: 0 6px;
-    }
-    .sb a.on { background: #0a3a7a; color: #fff; }
-    .sb svg { width: 14px; height: 14px; flex: none; }
-    .sb span { font-size: 11px; font-weight: 500; white-space: nowrap; }
-    .app:not(.wide) .sb a { justify-content: center; padding: 0; }
-    .app:not(.wide) .sb span { display: none; }
-    .sb .who-app { margin-top: auto; display: none; padding: 8px 6px 2px; border-top: 1px solid rgba(255,255,255,0.08); color: #cbd5e1; font-size: 10.5px; }
-    .app.wide .sb .who-app { display: block; }
-    .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #f3f4f6; }
-    .topbar {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      background: #fff; border-bottom: 1px solid #e5e7eb; padding: 8px 10px;
-    }
-    .topbar b { display: block; font-size: 12.5px; }
-    .topbar span, .muted { color: #6b7280; }
-    .abtn {
-      background: var(--blue); color: #fff; border: 0; border-radius: 6px;
-      font-size: 11px; font-weight: 600; padding: 5px 8px; white-space: nowrap;
-    }
-    .ghost {
-      background: #fff; color: #111827; border: 1px solid #e5e7eb; border-radius: 6px;
-      font-size: 11px; font-weight: 600; padding: 4px 8px;
-    }
-    .body { padding: 8px; overflow: hidden; }
-    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-    .kpis.six { grid-template-columns: repeat(6, 1fr); }
-    .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 7px 8px; }
-    .kpi span { display: block; color: #6b7280; font-size: 10px; }
-    .kpi b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
-    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: auto; max-width: 100%; }
-    .card h4 { margin: 0; padding: 8px 8px 0; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; font-weight: 500; color: #6b7280; background: #f8fafc; padding: 5px 7px; font-size: 10px; }
-    td { padding: 5px 7px; border-top: 1px solid #eef2f6; font-variant-numeric: tabular-nums; }
-    td.r, th.r { text-align: right; }
-    .badge { display: inline-flex; border-radius: 999px; padding: 1px 6px; font-size: 10px; font-weight: 600; }
-    .ok { background: #ecfdf5; color: #047857; }
-    .warn { background: #fff7ed; color: #c2410c; }
-    .bad { background: #fef2f2; color: #b91c1c; }
-    .chart { width: 100%; height: 92px; display: block; }
-    .days { display: flex; justify-content: space-between; color: #9ca3af; font-size: 9px; padding: 0 2px 6px; }
-    .search {
-      height: 26px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff;
-      color: #9ca3af; padding: 0 8px; display: flex; align-items: center; min-width: 120px;
-    }
-    .row2 { display: grid; grid-template-columns: 1.4fr 0.8fr; gap: 6px; margin-top: 6px; }
-    .field { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
-    .field span { color: #6b7280; }
-    .rolebar { display: flex; gap: 4px; margin-bottom: 8px; }
-    .rolebar button { border: 1px solid #e5e7eb; background: #fff; border-radius: 6px; font-size: 10px; padding: 3px 6px; cursor: pointer; }
-    .rolebar button.on { background: var(--soft); color: var(--blue); border-color: #c5ddfb; font-weight: 700; }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .form-grid label { display: block; color: #6b7280; font-size: 10px; margin-bottom: 2px; }
-    .box { height: 24px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; padding: 4px 6px; color: #111827; }
-
-    @media (max-width: 1100px) {
-      .strip, .biz { grid-template-columns: repeat(3, 1fr); }
-      .hero-grid, .split, .split.flip, .navy-grid, .cta, .pair { grid-template-columns: 1fr; }
-      .laptop, .cta .laptop { width: 100%; }
-      .hero-visual { min-height: 0; }
-      .shot-note { text-align: left; }
-      .kpis.six { grid-template-columns: repeat(3, 1fr); }
-    }
-    @media (max-width: 860px) {
+    @media (max-width: 760px) {
       .wrap { width: min(var(--max), calc(100% - 32px)); }
-      .menu { display: inline-flex; flex-direction: column; justify-content: center; }
+      .menu { display: inline-flex; flex-direction: column; justify-content: center; margin-left: 8px; }
+      .nav { display: flex; }
       .nav-links {
-        display: none;
-        position: absolute;
-        top: 68px; left: 0; right: 0;
-        margin: 0;
-        padding: 8px 16px 16px;
-        background: #fff;
-        border-bottom: 1px solid var(--line);
-        flex-direction: column;
-        align-items: stretch;
-        gap: 2px;
+        display: none; position: absolute; top: 72px; left: 0; right: 0; margin: 0;
+        padding: 8px 16px 16px; background: #031C45; flex-direction: column; align-items: stretch; gap: 4px;
       }
+      header.light .nav-links { background: #fff; }
       body.nav-open .nav-links { display: flex; }
-      .nav-links a:not(.btn) { padding: 10px 4px; }
-      .grid-3, .notes, .steps, .cols4, .quotes, .legal, .foot-grid { grid-template-columns: 1fr 1fr; }
-      .steps:before { display: none; }
-      .band { padding: 64px 0; }
-      .nav-cta { display: inline-flex; margin-left: auto; }
-      .full { display: none; }
-      .short { display: inline; }
-      .checks { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 640px) {
-      h1 { font-size: 36px; }
-      .strip, .biz, .grid-3, .notes, .cols4, .quotes, .legal, .foot-grid, .paper-grid, .paper .foot, .pay-card { grid-template-columns: 1fr; }
-      .subfoot { flex-direction: column; }
-      .cta { padding: 28px 22px; }
+      .nav-end { margin-left: auto; }
+      .nav-cta { display: inline-flex; }
+      .nav-cta-full { display: none; }
+      .grid-3, .steps { grid-template-columns: 1fr; }
+      .cta { padding: 36px 22px; }
+      .band, .navy { padding: 72px 0; }
     }
   </style>
 </head>
 <body>
   <header>
     <div class="wrap nav">
-      <a class="brand" href="#top"><img src="Bizora_applogo.png" alt="Bizora" /> Bizora</a>
+      <a class="brand" href="#top"><img src="Bizora_applogo.png" alt="" /> Bizora</a>
       <nav class="nav-links" id="nav">
         <a href="#features">Features</a>
         <a href="#screenshots">Screenshots</a>
         <a href="#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
         <a href="#help">Help</a>
-        <a class="btn btn-sm" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M0 2.2 6.6 1.3v6.1H0V2.2zm7.4-1L16 0v7.4H7.4V1.2zM0 8.6h6.6v6.1L0 13.7V8.6zm7.4 0H16V16l-8.6-1.2V8.6z"/></svg> Download for Windows</a>
       </nav>
-      <a class="btn btn-sm nav-cta" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe" aria-label="Download for Windows"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M0 2.2 6.6 1.3v6.1H0V2.2zm7.4-1L16 0v7.4H7.4V1.2zM0 8.6h6.6v6.1L0 13.7V8.6zm7.4 0H16V16l-8.6-1.2V8.6z"/></svg> <span class="short">Download</span></a>
-      <button class="menu" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><span></span><span></span><span></span></button>
+      <div class="nav-end">
+        <a class="btn btn-sm nav-cta-full" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">Download for Windows</a>
+        <a class="btn btn-sm nav-cta" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">Download</a>
+        <button class="menu" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><span></span><span></span><span></span></button>
+      </div>
     </div>
   </header>
 
   <main id="top">
     <section class="hero">
-      <div class="wrap hero-grid">
-        <div class="reveal">
-          <div class="pill">WINDOWS DESKTOP APP</div>
-          <h1>Billing that stays<br />on your <em>computer.</em></h1>
-          <p class="lede">Create GST invoices and quotations, manage products, customers, purchases and expenses, and print a UPI QR with the bill amount already filled in.</p>
-          <div class="hero-actions">
-            <a class="btn" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">Download Bizora for Windows <span aria-hidden="true">→</span></a>
-            <a class="btn btn-ghost" href="#features">See what it does</a>
+      <div class="orb a"></div>
+      <div class="orb b"></div>
+      <div class="orb c"></div>
+      <div class="wrap">
+        <div class="hero-copy">
+          <div class="pill reveal"><i></i> Windows desktop · Version 1.3.0</div>
+          <h1 class="reveal d1">Billing that stays<br />on your <em>computer.</em></h1>
+          <p class="lede reveal d2">GST invoices, quotations, stock, customers and reports. Offline, on the PC you already use. No browser workspace. No monthly fee.</p>
+          <div class="hero-actions reveal d3">
+            <a class="btn" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M0 2.2 6.6 1.3v6.1H0V2.2zm7.4-1L16 0v7.4H7.4V1.2zM0 8.6h6.6v6.1L0 13.7V8.6zm7.4 0H16V16l-8.6-1.2V8.6z"/></svg>
+              Download for Windows
+            </a>
+            <a class="btn btn-ghost" href="#screenshots">See the product</a>
           </div>
-          <p class="meta">Version 1.3.0 · Windows 10 and 11, 64-bit · Installer from GitHub</p>
-          <ul class="trust">
-            <li><i></i>100% Offline</li>
-            <li><i></i>No Monthly Fees</li>
-            <li><i></i>GST Ready</li>
-            <li><i></i>Fast &amp; Lightweight</li>
+          <p class="meta reveal d3">Windows 10 and 11, 64-bit · Installer from GitHub</p>
+          <ul class="trust reveal d3">
+            <li>Works offline</li>
+            <li>GST ready</li>
+            <li>UPI QR on bills</li>
+            <li>₹0 / month</li>
           </ul>
         </div>
-        <div class="hero-visual reveal d2">
-          <div class="laptop" aria-hidden="true">
-            <div class="lid">
-              <div class="cam"></div>
-              <div class="app wide tall" data-active="Dashboard" id="hero-app"></div>
-            </div>
-            <div class="base"></div>
-          </div>
-          <p class="shot-note">Desktop preview. Bizora opens on your PC after install.</p>
-        </div>
+      </div>
+      <div class="hero-shot reveal d3">
+        <img src="shots/dashboard.png" alt="Bizora dashboard with today's sales, monthly totals and recent invoices" />
       </div>
     </section>
 
-    <div class="strip-wrap">
-      <div class="wrap strip">
-        <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div><h3>GST Invoices</h3><p>Create professional GST invoices with HSN codes, GST, customer details and bank information.</p></article>
-        <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h8l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v5h5M8 13h8M8 17h6"/></svg></div><h3>Quotations</h3><p>Create quotations with validity dates and convert them into invoices.</p></article>
-        <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM17 17h4v4h-4z"/></svg></div><h3>UPI QR Bills</h3><p>Automatically generate a UPI QR containing the exact bill amount.</p></article>
-        <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg></div><h3>Products &amp; Stock</h3><p>Manage products, pricing, GST, stock quantities and opening balances.</p></article>
-        <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><h3>Customers</h3><p>Save customer details, purchase history, payments and outstanding balances.</p></article>
-        <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/></svg></div><h3>Reports</h3><p>Generate useful reports for sales, purchases, GST, stock, customers and expenses.</p></article>
+    <div class="wrap">
+      <div class="stats inview">
+        <article><b>Offline</b><span>Billing stays on this PC</span></article>
+        <article><b>GST</b><span>HSN, CGST, SGST on every bill</span></article>
+        <article><b>UPI QR</b><span>Amount filled in on print</span></article>
+        <article><b>Local backup</b><span>Password-protected file</span></article>
       </div>
     </div>
 
-    <section class="band" id="features">
+    <section class="band" id="screenshots">
+      <div class="wrap center">
+        <p class="eyebrow">The product</p>
+        <h2>This is the desktop app.</h2>
+        <p class="copy">The same sidebar, tables and actions you get after install. Switch the screen — nothing here is a laptop mockup.</p>
+        <div class="gallery">
+          <div class="tabs" id="tabs">
+            <button type="button" class="on" data-shot="dashboard">Dashboard</button>
+            <button type="button" data-shot="invoices">Invoices</button>
+            <button type="button" data-shot="sale">New sale</button>
+            <button type="button" data-shot="products">Products</button>
+            <button type="button" data-shot="customers">Customers</button>
+            <button type="button" data-shot="reports">Reports</button>
+          </div>
+          <div class="shot-stage">
+            <img class="on" data-shot="dashboard" src="shots/dashboard.png" alt="Dashboard" />
+            <img data-shot="invoices" src="shots/invoices.png" alt="Invoices" />
+            <img data-shot="sale" src="shots/sale.png" alt="Sales invoice" />
+            <img data-shot="products" src="shots/products.png" alt="Products" />
+            <img data-shot="customers" src="shots/customers.png" alt="Customers" />
+            <img data-shot="reports" src="shots/reports.png" alt="Reports" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band alt" id="features">
       <div class="wrap">
-        <div class="head-row">
-          <p class="eyebrow">Powerful features</p>
-          <h2>Everything you need to run your business efficiently.</h2>
-          <p class="section-copy">Bizora brings billing, inventory, customers, purchases, expenses and reporting into one simple desktop application.</p>
+        <p class="eyebrow">Features</p>
+        <h2>Everything for the day’s billing.</h2>
+        <div class="grid-3">
+          <article class="feat inview">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div>
+            <h3>GST invoices</h3>
+            <p>HSN, tax, discounts, place of supply, invoice numbers and a print-ready PDF.</p>
+          </article>
+          <article class="feat inview">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h8M8 10h8M8 14h5"/><rect x="4" y="3" width="16" height="18" rx="2"/></svg></div>
+            <h3>Quotations</h3>
+            <p>Send a validity date with the items, then convert the same quotation into an invoice.</p>
+          </article>
+          <article class="feat inview">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 10h8M8 14h5"/></svg></div>
+            <h3>UPI QR on the bill</h3>
+            <p>Save a UPI ID once. The printed invoice carries a QR with the amount payable already in it.</p>
+          </article>
+          <article class="feat inview">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+            <h3>Products and stock</h3>
+            <p>Purchase rate, selling rate, GST and quantity on every item, including opening stock.</p>
+          </article>
+          <article class="feat inview">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/></svg></div>
+            <h3>Customers</h3>
+            <p>Phone, GSTIN, place, purchase history and outstanding balances in one directory.</p>
+          </article>
+          <article class="feat inview">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3"/></svg></div>
+            <h3>Reports</h3>
+            <p>Sales, purchases, GST, stock, collections and a profit overview for the dates you pick.</p>
+          </article>
         </div>
-        <div class="grid-3" id="feature-grid"></div>
       </div>
     </section>
 
-    <section class="band alt" id="billing">
+    <section class="band" id="billing">
       <div class="wrap split">
-        <div class="app wide mid" data-active="New Sales" id="billing-app"></div>
-        <div>
-          <p class="eyebrow">Professional billing</p>
-          <h2>Create GST invoices in seconds.</h2>
+        <div class="inview">
+          <p class="eyebrow">Invoicing</p>
+          <h2>Create a GST invoice in one screen.</h2>
+          <p class="copy">Pick the customer, add catalogue items, set qty and rate. Tax splits itself. Edit an existing invoice without changing the number.</p>
           <ul class="checks">
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>HSN codes</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>GST calculations</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Customer details</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Place of supply</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Invoice numbering</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Discounts</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Tax breakdown</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Bank details</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>UPI QR</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Print-ready PDF</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>HSN, GST, discounts and place of supply</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Paid, partial and unpaid, with UPI, cash or bank</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Print or save as PDF from the same document</li>
           </ul>
-          <a class="text-link" href="#screenshots">Explore invoicing →</a>
         </div>
+        <div class="frame inview"><img src="shots/sale.png" alt="New sales invoice in Bizora" /></div>
       </div>
     </section>
 
-    <section class="band" id="quotations">
+    <section class="band alt">
       <div class="wrap split flip">
-        <div>
-          <p class="eyebrow">Quotations</p>
-          <h2>Turn enquiries into professional quotations.</h2>
-          <ul class="checks">
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Customer information</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Product selection</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Quantity and pricing</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>GST</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Validity date</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Notes</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Company details</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Convert quotation to invoice</li>
-          </ul>
-          <a class="text-link" href="#screenshots">Create a quotation →</a>
-        </div>
-        <div class="app wide mid" data-active="Quotations" id="quote-app"></div>
-      </div>
-    </section>
-
-    <section class="band alt" id="products">
-      <div class="wrap">
-        <div class="head-row">
+        <div class="frame inview"><img src="shots/products.png" alt="Product stock list in Bizora" /></div>
+        <div class="inview">
           <p class="eyebrow">Inventory</p>
-          <h2>Know exactly what is in stock.</h2>
-          <p class="section-copy">Search, filter and keep purchase price, selling price, GST and stock on every product.</p>
-        </div>
-        <div class="app wide mid" data-active="Products" id="products-app"></div>
-        <div class="notes">
-          <article class="mini-note"><strong>Opening Stock</strong><p>Set your starting inventory.</p></article>
-          <article class="mini-note"><strong>Stock Tracking</strong><p>Monitor incoming and outgoing stock.</p></article>
-          <article class="mini-note"><strong>Pricing Control</strong><p>Maintain purchase and selling prices.</p></article>
-          <article class="mini-note"><strong>GST Ready</strong><p>Store tax information with products.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="band" id="customers">
-      <div class="wrap split">
-        <div class="app wide mid" data-active="Customers" id="customers-app"></div>
-        <div>
-          <p class="eyebrow">Customers</p>
-          <h2>Keep every customer record organized.</h2>
+          <h2>Know what is on the shelf.</h2>
+          <p class="copy">Search the catalogue, keep purchase and selling prices, and watch stock move when you buy or sell.</p>
           <ul class="checks">
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Customer history</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Outstanding payments</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Invoice history</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Purchase tracking</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Contact information</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>GSTIN on file</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Opening stock, low-stock flags, HSN and GST</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Purchases raise stock; sales bring it down</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Import a category catalogue, then sell from it</li>
           </ul>
         </div>
       </div>
     </section>
 
-    <section class="band alt" id="purchases">
-      <div class="wrap">
-        <div class="head-row">
-          <p class="eyebrow">Money in and out</p>
-          <h2>Track what comes in and what goes out.</h2>
-        </div>
-        <div class="pair">
-          <div>
-            <h3 class="subhead">Purchase Management</h3>
-            <div class="app mid" data-active="Purchases" id="purchase-app"></div>
-          </div>
-          <div>
-            <h3 class="subhead">Expense Management</h3>
-            <div class="app mid" data-active="Reports" id="expense-app"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="band" id="reports">
-      <div class="wrap">
-        <div class="head-row">
-          <p class="eyebrow">Reports</p>
-          <h2>Understand your business with clear reports.</h2>
-          <p class="section-copy">Sales, purchases, expenses, GST, stock, customer balances, collections and a profit overview. Charts stay in Bizora blue.</p>
-        </div>
-        <div class="app wide tall" data-active="Reports" id="reports-app"></div>
-      </div>
-    </section>
-
-    <section class="band alt" id="print">
+    <section class="band">
       <div class="wrap split">
-        <div class="paper" id="paper"></div>
-        <div>
-          <p class="eyebrow">Print &amp; PDF</p>
-          <h2>Professional documents, ready to print.</h2>
+        <div class="inview">
+          <p class="eyebrow">People and paper</p>
+          <h2>Customers, purchases, staff.</h2>
+          <p class="copy">Keep GSTIN and outstanding on the customer. Record a supplier bill. Give cashiers a smaller set of actions than the owner.</p>
           <ul class="checks">
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Print directly from Bizora</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Save as PDF</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Professional company branding</li>
-            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Bank details and UPI QR</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Customer balances next to invoice history</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Purchase entry with rate, GST and amount</li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Owner, manager, cashier and staff roles</li>
           </ul>
         </div>
+        <div class="frame inview"><img src="shots/customers.png" alt="Customer directory in Bizora" /></div>
       </div>
     </section>
 
-    <section class="band upi-band" id="upi">
-      <div class="wrap split">
-        <div>
-          <p class="eyebrow">UPI QR</p>
-          <h2>Make digital payments easier.</h2>
-          <p class="section-copy">Save a UPI ID once. When you print a sales invoice, Bizora adds a UPI QR with the amount payable already filled in. Quotations use the quotation total.</p>
-          <div class="pay-card" style="margin-top:18px">
-            <div>
-              <div class="muted">UPI ID</div>
-              <strong>harbour@okaxis</strong>
-              <div class="muted" style="margin-top:10px">Amount payable</div>
-              <div class="amount">₹13,184</div>
-              <div class="muted">Scan to pay · INV-1042</div>
-            </div>
-            <div class="qr-slot"></div>
-          </div>
-        </div>
-        <div class="app wide mid" data-active="Invoices" id="upi-app"></div>
-      </div>
-    </section>
-
-    <section class="navy-band" id="offline">
-      <div class="wrap navy-grid">
-        <div>
-          <p class="eyebrow">Desktop application</p>
-          <h2>Your business data stays on your computer.</h2>
-          <p class="section-copy">Bizora is designed as a Windows desktop application. Your day-to-day business data stays locally on your computer, giving you control over your workspace.</p>
-          <div class="navy-cards">
-            <article><h3>Works Offline</h3><p>No internet connection required for everyday billing.</p></article>
-            <article><h3>Your Data, Your Control</h3><p>Business records stay within your local workspace.</p></article>
-            <article><h3>Fast &amp; Lightweight</h3><p>Optimized for quick desktop workflows.</p></article>
-          </div>
-        </div>
-        <div class="laptop" aria-hidden="true">
-          <div class="lid"><div class="cam"></div><div class="app wide mid" data-active="Dashboard" id="offline-app"></div></div>
-          <div class="base"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="band" id="backup">
-      <div class="wrap split">
-        <div>
-          <p class="eyebrow">Backup</p>
-          <h2>Keep your business protected.</h2>
-          <p class="section-copy">Create a password-protected backup of the business file on this computer, and restore it when you need that copy back.</p>
-          <div class="notes" style="grid-template-columns:1fr 1fr">
-            <article class="mini-note"><strong>Local Backups</strong><p>Create backups of your business data.</p></article>
-            <article class="mini-note"><strong>Restore Anytime</strong><p>Restore a previous backup when needed.</p></article>
-            <article class="mini-note"><strong>Secure Backup Files</strong><p>Keep business backups separate from your everyday workflow.</p></article>
-            <article class="mini-note"><strong>Backup History</strong><p>See when backups were created.</p></article>
-          </div>
-        </div>
-        <div>
-          <div class="app wide mid" data-active="Settings" id="backup-app"></div>
-          <div class="timeline">
-            <div><strong>Today · 8:40 PM</strong><span>Manual backup</span></div>
-            <div><strong>Yesterday · 9:00 PM</strong><span>Daily schedule</span></div>
-            <div><strong>26 Sep · 9:00 PM</strong><span>Daily schedule</span></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="band alt" id="staff">
-      <div class="wrap split">
-        <div class="app wide mid" data-active="Settings" id="staff-app"></div>
-        <div>
-          <p class="eyebrow">Staff</p>
-          <h2>Built for owners and growing teams.</h2>
-          <p class="section-copy">Add people with a role. Owner, manager, cashier and staff do not all see the same actions.</p>
-          <div class="card" style="margin-top:16px;padding:12px">
-            <div class="rolebar" id="rolebar">
-              <button type="button" class="on" data-role="Owner">Owner</button>
-              <button type="button" data-role="Manager">Manager</button>
-              <button type="button" data-role="Cashier">Cashier</button>
-              <button type="button" data-role="Staff">Staff</button>
-            </div>
-            <ul class="checks" id="role-list" style="margin:0"></ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="band" id="dashboard">
+    <section class="navy" id="offline">
       <div class="wrap">
-        <div class="head-row">
-          <p class="eyebrow">Dashboard</p>
-          <h2>See your business at a glance.</h2>
+        <p class="eyebrow">Desktop application</p>
+        <h2>Your books stay on this machine.</h2>
+        <p class="copy">Bizora is installed on Windows. Day-to-day invoices, stock and customers are not kept in a browser tab. Optional Google Drive backup is there if you want a copy off the PC.</p>
+        <div class="navy-grid">
+          <article class="inview"><h3>Works offline</h3><p>Create invoices and look up stock with no internet connection.</p></article>
+          <article class="inview"><h3>Local backups</h3><p>A password-protected backup file on this computer, restore when you need it.</p></article>
+          <article class="inview"><h3>In-app updates</h3><p>When this PC is online, Bizora can check GitHub for a newer installer.</p></article>
         </div>
-        <div class="app wide tall" data-active="Dashboard" id="dash-app"></div>
       </div>
     </section>
 
     <section class="band alt" id="start">
       <div class="wrap">
-        <p class="eyebrow">Get started in minutes</p>
-        <h2>Simple. Fast. Ready to use.</h2>
+        <p class="eyebrow">Get started</p>
+        <h2>Install once. Bill the same day.</h2>
         <div class="steps">
-          <article class="step"><div class="num">01</div><h3>Download</h3><p>Get the Bizora Windows installer.</p></article>
-          <article class="step"><div class="num">02</div><h3>Install</h3><p>Run the setup on your computer.</p></article>
-          <article class="step"><div class="num">03</div><h3>Set Up</h3><p>Add your company information, tax details and preferences.</p></article>
-          <article class="step"><div class="num">04</div><h3>Start Billing</h3><p>Create invoices, quotations and manage your business.</p></article>
+          <article class="step inview"><div class="num">01</div><h3>Download</h3><p>Get Bizora-Setup-1.3.0.exe from GitHub.</p></article>
+          <article class="step inview"><div class="num">02</div><h3>Install</h3><p>Run setup on Windows 10 or 11, 64-bit.</p></article>
+          <article class="step inview"><div class="num">03</div><h3>Company</h3><p>Add name, GSTIN, bank and a UPI ID.</p></article>
+          <article class="step inview"><div class="num">04</div><h3>Bill</h3><p>Create the first invoice or quotation.</p></article>
         </div>
       </div>
     </section>
 
     <section class="band" id="businesses">
       <div class="wrap">
-        <h2>Built for growing businesses.</h2>
+        <p class="eyebrow">Who it is for</p>
+        <h2>Built for shops that bill every day.</h2>
         <div class="biz">
-          <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10h18v10H3zM3 10l2-6h14l2 6M9 20v-6h6v6"/></svg></div><h3>Retail Shops</h3><p>Counter sales, stock and customer balances.</p></article>
-          <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="18" r="1.5"/><circle cx="18" cy="18" r="1.5"/></svg></div><h3>Distributors</h3><p>Quotations, purchases and GST invoices.</p></article>
-          <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div><h3>Traders</h3><p>Purchase rates, selling prices and stock.</p></article>
-          <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 7h7v13H3V4h7l4 3z"/></svg></div><h3>Service Providers</h3><p>Invoices, quotations and customer records.</p></article>
-          <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></div><h3>Manufacturers</h3><p>Materials, purchases and sales documents.</p></article>
-          <article><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div><h3>Small Businesses</h3><p>Bill, track and report from one PC.</p></article>
+          <article class="inview"><h3>Retail shops</h3><p>Counter sales, stock and customer balances.</p></article>
+          <article class="inview"><h3>Distributors</h3><p>Quotations, GST invoices and purchases.</p></article>
+          <article class="inview"><h3>Traders</h3><p>Purchase rate, selling price and quantity in one place.</p></article>
+          <article class="inview"><h3>Service providers</h3><p>Invoices, quotations and a customer directory.</p></article>
+          <article class="inview"><h3>Workshops</h3><p>Parts, labour lines and outstanding on the same PC.</p></article>
+          <article class="inview"><h3>Small manufacturers</h3><p>Materials in, finished goods out, GST on the bill.</p></article>
         </div>
       </div>
     </section>
 
-    <section class="band alt" id="why">
-      <div class="wrap">
-        <h2>A simpler way to manage everyday billing.</h2>
-        <div class="cols4 why">
-          <article><h3>Desktop-first</h3><p>Bizora is installed on Windows. Billing happens in the application, not in a browser tab.</p></article>
-          <article><h3>Offline workflow</h3><p>Invoices, stock, customers and reports are available without an internet connection.</p></article>
-          <article><h3>No monthly subscription</h3><p>Download the installer. There is no monthly fee to keep the desktop app.</p></article>
-          <article>
-            <h3>Bizora includes</h3>
-            <ul>
-              <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>GST billing</li>
-              <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Inventory</li>
-              <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Customers</li>
-              <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>Reports</li>
-              <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>PDF invoices</li>
-              <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>UPI QR</li>
-            </ul>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="band" id="pricing">
+    <section class="band alt" id="pricing">
       <div class="wrap center">
         <p class="eyebrow">Pricing</p>
         <h2>One download. No monthly fee.</h2>
-        <p class="section-copy">Bizora 1.3.0 is a Windows desktop installer. You are not billed every month to keep using it on your computer.</p>
-        <article class="price">
+        <p class="copy">Bizora 1.3.0 is a Windows installer. You are not billed every month to keep using it on your computer.</p>
+        <article class="price inview">
           <h3>Bizora for Windows</h3>
           <div class="zero">₹0 <span>/ month</span></div>
           <ul>
@@ -854,42 +544,14 @@
             <li>Reports, staff roles, print and UPI QR</li>
             <li>Password-protected local backups</li>
           </ul>
-          <a class="btn" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">Download Bizora for Windows <span aria-hidden="true">→</span></a>
+          <a class="btn" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">Download Bizora for Windows</a>
         </article>
       </div>
     </section>
 
-    <section class="band alt" id="screenshots">
-      <div class="wrap">
-        <p class="eyebrow">Product</p>
-        <h2>Look through the desktop app.</h2>
-        <p class="section-copy">Every screen uses the same Bizora sidebar, tables and actions. These are previews, not a browser version of the app.</p>
-        <div class="tabs" id="tabs">
-          <button type="button" class="on" data-jump="dashboard">Dashboard</button>
-          <button type="button" data-jump="billing">Billing</button>
-          <button type="button" data-jump="inventory">Inventory</button>
-          <button type="button" data-jump="customers">Customers</button>
-          <button type="button" data-jump="reports">Reports</button>
-        </div>
-      </div>
-      <div class="film-bleed">
-        <div class="film" id="film"></div>
-      </div>
-    </section>
-
-    <section class="band">
-      <div class="wrap">
-        <h2>Designed for everyday business.</h2>
-        <div class="quotes">
-          <article class="quote"><p>“I prepare the tax invoice, check the HSN lines, and print. The UPI QR already has the balance on it.”</p><div class="who"><div class="avatar">TM</div><div><strong>Thomas Mathew</strong><span>Retail shop, Kochi</span></div></div></article>
-          <article class="quote"><p>“Quotations go out with a validity date. When the buyer confirms, the same items are ready to bill.”</p><div class="who"><div class="avatar">PN</div><div><strong>Priya Nair</strong><span>Distributor, Thrissur</span></div></div></article>
-          <article class="quote"><p>“Stock, purchase price and the day’s sales sit on one computer. I don’t keep a second sheet for that.”</p><div class="who"><div class="avatar">AK</div><div><strong>Anoop Kumar</strong><span>Trading firm, Ernakulam</span></div></div></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="band alt" id="faq">
+    <section class="band" id="faq">
       <div class="wrap center">
+        <p class="eyebrow">Help</p>
         <h2>Questions</h2>
         <div class="faq" id="help">
           <button class="faq-q" type="button" aria-expanded="true">Does Bizora work without internet?<span class="mark"></span></button>
@@ -899,55 +561,29 @@
           <button class="faq-q" type="button" aria-expanded="false">Can I create GST invoices?<span class="mark"></span></button>
           <p class="faq-a" hidden>Yes. Invoices include HSN, GST, place of supply, discounts, a tax breakdown, bank details and a print layout.</p>
           <button class="faq-q" type="button" aria-expanded="false">Can I generate quotations?<span class="mark"></span></button>
-          <p class="faq-a" hidden>Yes. A quotation can include the customer, items, prices, GST, a validity date and notes.</p>
+          <p class="faq-a" hidden>Yes. A quotation can include the customer, items, prices, GST, a validity date and notes, then convert to an invoice.</p>
           <button class="faq-q" type="button" aria-expanded="false">Can I manage products and stock?<span class="mark"></span></button>
           <p class="faq-a" hidden>Yes. Store the SKU, HSN, purchase and selling prices, GST and stock quantity, including an opening balance.</p>
-          <button class="faq-q" type="button" aria-expanded="false">Can I create UPI QR invoices?<span class="mark"></span></button>
-          <p class="faq-a" hidden>Yes. Save a UPI ID in invoice settings. A sales invoice can print a UPI QR with the amount payable filled in. A quotation uses the quotation total.</p>
-          <button class="faq-q" type="button" aria-expanded="false">Can I print or save invoices as PDF?<span class="mark"></span></button>
-          <p class="faq-a" hidden>Yes. Print from the document, or choose Save as PDF in the Windows print dialog.</p>
-          <button class="faq-q" type="button" aria-expanded="false">Can I manage customers and suppliers?<span class="mark"></span></button>
-          <p class="faq-a" hidden>Yes. Customers keep phone, address, GSTIN and balances. Purchases record the supplier bill, items, quantity, rate and GST.</p>
-          <button class="faq-q" type="button" aria-expanded="false">Can multiple staff accounts be created?<span class="mark"></span></button>
-          <p class="faq-a" hidden>Yes. An owner can add manager, cashier and staff accounts. Each role has its own access.</p>
+          <button class="faq-q" type="button" aria-expanded="false">Can I print a UPI QR on the invoice?<span class="mark"></span></button>
+          <p class="faq-a" hidden>Yes. Save a UPI ID in settings. A sales invoice can print a UPI QR with the amount payable filled in.</p>
           <button class="faq-q" type="button" aria-expanded="false">Where is my business data stored?<span class="mark"></span></button>
           <p class="faq-a" hidden>On the Windows PC where Bizora is installed. This website does not open your books or store your invoices.</p>
-          <button class="faq-q" type="button" aria-expanded="false">Can I backup and restore my data?<span class="mark"></span></button>
+          <button class="faq-q" type="button" aria-expanded="false">Can I backup and restore?<span class="mark"></span></button>
           <p class="faq-a" hidden>Yes. From Settings you can create a password-protected backup and restore a backup file later.</p>
         </div>
-        <p class="section-copy" style="margin-top:22px">Installer help: run Bizora-Setup-1.3.0.exe, then open Bizora from the Start menu. Release notes are on <a class="text-link" href="https://github.com/realcaps04/bizora/releases/tag/v1.3.0" target="_blank" rel="noopener">GitHub</a>.</p>
+        <p class="copy" style="margin-top:24px">Run <strong>Bizora-Setup-1.3.0.exe</strong>, then open Bizora from the Start menu. Release notes are on <a href="https://github.com/realcaps04/bizora/releases/tag/v1.3.0" target="_blank" rel="noopener" style="color:var(--blue);font-weight:600">GitHub</a>.</p>
       </div>
     </section>
 
-    <div class="cta-wrap" id="download">
-      <div class="wrap">
-        <div class="cta">
-          <div>
-            <h2>Ready to simplify your billing?</h2>
-            <p>Download Bizora for Windows and start managing your everyday business from one simple desktop application.</p>
-            <a class="btn" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M0 2.2 6.6 1.3v6.1H0V2.2zm7.4-1L16 0v7.4H7.4V1.2zM0 8.6h6.6v6.1L0 13.7V8.6zm7.4 0H16V16l-8.6-1.2V8.6z"/></svg> Download Bizora for Windows <span aria-hidden="true">→</span></a>
-            <p class="meta">Windows 10 &amp; 11 · 64-bit · Version 1.3.0</p>
-          </div>
-          <div class="laptop" aria-hidden="true">
-            <div class="lid"><div class="cam"></div><div class="app wide" style="height:240px" data-active="Dashboard" id="cta-app"></div></div>
-            <div class="base"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="wrap legal" id="about">
-      <div>
-        <h2>About</h2>
-        <p>Bizora is a Windows desktop application for GST billing, quotations, inventory, customers, purchases, expenses and reports.</p>
-      </div>
-      <div id="privacy">
-        <h2>Privacy</h2>
-        <p>Day-to-day business records stay on the computer where you install Bizora. This page only describes the product and links to the installer. It does not run the billing workspace.</p>
-      </div>
-      <div id="terms">
-        <h2>Terms</h2>
-        <p>The download is the Windows installer for version 1.3.0, for Windows 10 and 11, 64-bit, published with the GitHub release.</p>
+    <div class="wrap" id="download" style="padding-bottom:96px">
+      <div class="cta inview">
+        <h2>Install Bizora on this PC.</h2>
+        <p>Download the Windows installer and start GST billing from one desktop application.</p>
+        <a class="btn btn-navy" href="https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M0 2.2 6.6 1.3v6.1H0V2.2zm7.4-1L16 0v7.4H7.4V1.2zM0 8.6h6.6v6.1L0 13.7V8.6zm7.4 0H16V16l-8.6-1.2V8.6z"/></svg>
+          Download Bizora for Windows
+        </a>
+        <p class="meta">Windows 10 &amp; 11 · 64-bit · Version 1.3.0</p>
       </div>
     </div>
   </main>
@@ -956,293 +592,64 @@
     <div class="wrap">
       <div class="foot-grid">
         <div>
-          <a class="brand" href="#top"><img src="Bizora_applogo.png" alt="" /> Bizora</a>
-          <p class="tag">Simple Billing. Smarter Business.</p>
+          <a class="brand" href="#top" style="color:var(--navy)"><img src="Bizora_applogo.png" alt="" /> Bizora</a>
+          <p class="tag">Simple billing. On your computer.</p>
         </div>
         <div>
           <h3>Product</h3>
           <ul>
-            <li><a href="#features">Features</a></li>
             <li><a href="#screenshots">Screenshots</a></li>
-            <li><a href="#download">Download</a></li>
+            <li><a href="#features">Features</a></li>
             <li><a href="#pricing">Pricing</a></li>
-            <li><a href="#faq">FAQ</a></li>
+            <li><a href="#download">Download</a></li>
           </ul>
         </div>
         <div>
           <h3>Resources</h3>
           <ul>
-            <li><a href="#help">Help</a></li>
-            <li><a href="#start">Documentation</a></li>
+            <li><a href="#faq">FAQ</a></li>
+            <li><a href="#start">Install</a></li>
             <li><a href="https://github.com/realcaps04/bizora/releases/tag/v1.3.0" target="_blank" rel="noopener">Releases</a></li>
           </ul>
         </div>
         <div>
           <h3>Company</h3>
           <ul>
-            <li><a href="#about">About</a></li>
-            <li><a href="#privacy">Privacy</a></li>
-            <li><a href="#terms">Terms</a></li>
-            <li><a href="https://github.com/realcaps04/bizora" target="_blank" rel="noopener">Contact</a></li>
+            <li><a href="#offline">About</a></li>
+            <li><a href="#faq">Privacy</a></li>
+            <li><a href="https://github.com/realcaps04/bizora" target="_blank" rel="noopener">GitHub</a></li>
           </ul>
         </div>
       </div>
       <div class="subfoot">
         <span>© 2026 Bizora. All rights reserved.</span>
-        <span>Windows Desktop Application</span>
+        <span>Windows desktop application</span>
       </div>
     </div>
   </footer>
 
   <script>
-    const EXE = "https://github.com/realcaps04/bizora/releases/download/v1.3.0/Bizora-Setup-1.3.0.exe";
-    const ic = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-    const NAV = [
-      ["Dashboard", ic('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="14" width="7" height="7"/>')],
-      ["New Sales", ic('<path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>')],
-      ["Invoices", ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/>')],
-      ["Quotations", ic('<path d="M8 6h8M8 10h8M8 14h5"/><rect x="4" y="3" width="16" height="18" rx="2"/>')],
-      ["Customers", ic('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/>')],
-      ["Products", ic('<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>')],
-      ["Purchases", ic('<path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/>')],
-      ["Reports", ic('<path d="M4 19V5M4 19h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/>')],
-      ["Staff", ic('<path d="M16 21v-2a4 4 0 0 0-3-3.87"/><circle cx="8" cy="8" r="3"/><path d="M2 21v-2a4 4 0 0 1 4-4h4"/>')],
-      ["Settings", ic('<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>')]
-    ];
-
-    function shell(active) {
-      const links = NAV.map(([name, icon]) => `<a class="${name === active ? "on" : ""}">${icon}<span>${name}</span></a>`).join("");
-      return `<aside class="sb"><img src="Bizora_applogo.png" alt=""><div class="co"><b>Bizora</b><small>Harbour Provisions</small></div>${links}<div class="who-app">Anoop · Owner</div></aside>`;
-    }
-    function mount(id, active, inner) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.innerHTML = shell(active) + `<div class="pane">${inner}</div>`;
-    }
-    function badge(kind, text) { return `<span class="badge ${kind}">${text}</span>`; }
-    function chart(id) {
-      return `<svg class="chart" viewBox="0 0 320 100" preserveAspectRatio="none">
-        <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0878F9" stop-opacity="0.28"/><stop offset="1" stop-color="#0878F9" stop-opacity="0"/></linearGradient></defs>
-        <path d="M0 78 C28 70 48 64 70 68 S120 36 150 44 200 18 230 30 280 16 320 22 V100 H0 Z" fill="url(#${id})"/>
-        <path d="M0 78 C28 70 48 64 70 68 S120 36 150 44 200 18 230 30 280 16 320 22" fill="none" stroke="#0878F9" stroke-width="2"/>
-      </svg><div class="days"><span>01 Sep</span><span>08</span><span>15</span><span>22</span><span>27</span></div>`;
-    }
-    const invoiceRows = `
-      <tr><td>INV-1042</td><td>Anjali Stores</td><td>27 Sep</td><td class="r">₹18,450</td><td>${badge("ok","Paid")}</td></tr>
-      <tr><td>INV-1041</td><td>Rahman Traders</td><td>27 Sep</td><td class="r">₹42,800</td><td>${badge("warn","Partial")}</td></tr>
-      <tr><td>INV-1040</td><td>Greenleaf Mart</td><td>26 Sep</td><td class="r">₹9,640</td><td>${badge("bad","Unpaid")}</td></tr>
-      <tr><td>INV-1039</td><td>Kottayam Stores</td><td>26 Sep</td><td class="r">₹27,150</td><td>${badge("ok","Paid")}</td></tr>`;
-
-    function dashboard(compact, chartId) {
-      const kpis = compact
-        ? `<div class="kpis"><div class="kpi"><span>Today's Sales</span><b>₹48,290</b></div><div class="kpi"><span>This Month</span><b>₹6,42,180</b></div><div class="kpi"><span>Outstanding</span><b>₹1,18,640</b></div><div class="kpi"><span>Customers</span><b>186</b></div></div>`
-        : `<div class="kpis six"><div class="kpi"><span>Today's Sales</span><b>₹48,290</b></div><div class="kpi"><span>Today's Purchases</span><b>₹21,450</b></div><div class="kpi"><span>Outstanding</span><b>₹1,18,640</b></div><div class="kpi"><span>Expenses</span><b>₹6,820</b></div><div class="kpi"><span>Customers</span><b>186</b></div><div class="kpi"><span>Low Stock</span><b>7</b></div></div>`;
-      return `<div class="topbar"><div><b>Good evening, Anoop</b><span>Business overview</span></div><span class="abtn">New Sale</span></div>
-        <div class="body">${kpis}
-          <div class="row2"><div class="card"><h4>Sales Overview</h4>${chart(chartId)}</div>
-          <div class="card"><h4>Recent invoices</h4><table><tbody>${invoiceRows}</tbody></table></div></div>
-          ${compact ? "" : `<div class="row2"><div class="card"><h4>Recent payments</h4><table><tr><td>Anjali Stores</td><td class="r">₹18,450</td><td>UPI</td></tr><tr><td>Kottayam Stores</td><td class="r">₹27,150</td><td>Bank</td></tr><tr><td>Rahman Traders</td><td class="r">₹20,000</td><td>Cash</td></tr></table></div>
-          <div class="card"><h4>Top products</h4><table><tr><td>Basmati Rice 25 kg</td><td class="r">₹1,74,000</td></tr><tr><td>Sunflower Oil 5 L</td><td class="r">₹93,600</td></tr><tr><td>Toor Dal 1 kg</td><td class="r">₹51,200</td></tr></table></div></div>`}
-        </div>`;
-    }
-
-    mount("hero-app", "Dashboard", dashboard(true, "cHero"));
-    mount("offline-app", "Dashboard", dashboard(true, "cOff"));
-    mount("cta-app", "Dashboard", dashboard(true, "cCta"));
-    mount("dash-app", "Dashboard", dashboard(false, "cDash"));
-
-    mount("billing-app", "New Sales", `<div class="topbar"><div><b>New Sale</b><span>INV-1043 · Kerala (32)</span></div><span class="abtn">Save invoice</span></div>
-      <div class="body"><div class="card" style="padding:8px;margin-bottom:6px"><div class="field"><span>Customer</span><b>Anjali Stores</b></div><div class="field"><span>Place of supply</span><b>Kerala (32)</b></div><div class="field"><span>Invoice date</span><b>27 Sep 2026</b></div></div>
-      <div class="card"><table><thead><tr><th>Product</th><th>HSN</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">GST</th><th class="r">Amount</th></tr></thead><tbody>
-        <tr><td>Basmati Rice 25 kg</td><td>1006</td><td class="r">12</td><td class="r">1,450</td><td class="r">5%</td><td class="r">17,400</td></tr>
-        <tr><td>Sunflower Oil 5 L</td><td>1512</td><td class="r">6</td><td class="r">780</td><td class="r">5%</td><td class="r">4,680</td></tr>
-      </tbody></table></div>
-      <div class="row2"><div class="card" style="padding:8px"><div class="field"><span>Taxable</span><b>₹22,080</b></div><div class="field"><span>CGST 2.5%</span><b>₹552</b></div><div class="field"><span>SGST 2.5%</span><b>₹552</b></div><div class="field"><span>Grand total</span><b>₹23,184</b></div></div>
-      <div class="card" style="padding:8px"><div class="muted">UPI QR · balance ₹13,184</div><div class="qr-slot" style="margin-top:6px"></div></div></div></div>`);
-
-    mount("quote-app", "Quotations", `<div class="topbar"><div><b>New Quotation</b><span>QO-208 · Valid 15 Oct 2026</span></div><span class="abtn">Save quotation</span></div>
-      <div class="body"><div class="card" style="padding:8px;margin-bottom:6px"><div class="field"><span>Customer</span><b>Rahman Traders, Thrissur</b></div><div class="field"><span>Validity</span><b>15 Oct 2026</b></div><div class="field"><span>Notes</span><b>Prices held until the validity date.</b></div></div>
-      <div class="card"><table><thead><tr><th>Product</th><th class="r">Qty</th><th class="r">Price</th><th class="r">GST</th><th class="r">Amount</th></tr></thead><tbody>
-        <tr><td>Wheat Atta 10 kg</td><td class="r">40</td><td class="r">390</td><td class="r">5%</td><td class="r">15,600</td></tr>
-        <tr><td>Toor Dal 1 kg</td><td class="r">80</td><td class="r">128</td><td class="r">5%</td><td class="r">10,240</td></tr>
-      </tbody></table></div>
-      <div class="card" style="padding:8px;margin-top:6px"><div class="field"><span>Company</span><b>Harbour Provisions, Kochi</b></div><div class="field"><span>Grand total</span><b>₹27,132</b></div></div></div>`);
-
-    mount("products-app", "Products", `<div class="topbar"><div><b>Products</b><span>Stock and pricing</span></div><div style="display:flex;gap:6px;align-items:center"><div class="search">Search products</div><span class="ghost">Filters</span><span class="abtn">Add Product</span></div></div>
-      <div class="body"><div class="card"><table><thead><tr><th>Product</th><th>SKU</th><th>HSN</th><th class="r">Purchase</th><th class="r">Selling</th><th class="r">GST</th><th class="r">Stock</th><th class="r">Min</th><th>Status</th></tr></thead><tbody>
-        <tr><td>Basmati Rice 25 kg</td><td>BR-25</td><td>1006</td><td class="r">1,180</td><td class="r">1,450</td><td class="r">5%</td><td class="r">86</td><td class="r">20</td><td>${badge("ok","In stock")}</td></tr>
-        <tr><td>Sunflower Oil 5 L</td><td>SO-5</td><td>1512</td><td class="r">620</td><td class="r">780</td><td class="r">5%</td><td class="r">14</td><td class="r">24</td><td>${badge("warn","Low")}</td></tr>
-        <tr><td>Toor Dal 1 kg</td><td>TD-1</td><td>0713</td><td class="r">92</td><td class="r">128</td><td class="r">5%</td><td class="r">240</td><td class="r">40</td><td>${badge("ok","In stock")}</td></tr>
-        <tr><td>Wheat Atta 10 kg</td><td>WA-10</td><td>1101</td><td class="r">310</td><td class="r">390</td><td class="r">5%</td><td class="r">64</td><td class="r">15</td><td>${badge("ok","In stock")}</td></tr>
-      </tbody></table></div></div>`);
-
-    mount("customers-app", "Customers", `<div class="topbar"><div><b>Customers</b><span>Directory</span></div><span class="abtn">Add Customer</span></div>
-      <div class="body"><div class="row2" style="grid-template-columns:1.3fr .9fr"><div class="card"><table><thead><tr><th>Customer</th><th>Phone</th><th class="r">Purchases</th><th class="r">Paid</th><th class="r">Due</th></tr></thead><tbody>
-        <tr><td>Anjali Stores</td><td>98470 11220</td><td class="r">2,48,600</td><td class="r">2,14,200</td><td class="r">34,400</td></tr>
-        <tr><td>Rahman Traders</td><td>98950 22118</td><td class="r">5,12,900</td><td class="r">4,40,000</td><td class="r">72,900</td></tr>
-        <tr><td>Greenleaf Mart</td><td>97461 33012</td><td class="r">96,400</td><td class="r">86,760</td><td class="r">9,640</td></tr>
-        <tr><td>Kottayam Stores</td><td>94470 11880</td><td class="r">1,62,000</td><td class="r">1,62,000</td><td class="r">0</td></tr>
-      </tbody></table></div>
-      <div class="card" style="padding:8px"><b>Anjali Stores</b><div class="field"><span>Phone</span>98470 11220</div><div class="field"><span>Address</span>MG Road, Kochi</div><div class="field"><span>GSTIN</span>32AAAAA0000A1Z5</div><div class="field"><span>Purchases</span>₹2,48,600</div><div class="field"><span>Paid</span>₹2,14,200</div><div class="field"><span>Outstanding</span>₹34,400</div><div class="field"><span>Last bill</span>INV-1042</div></div></div></div>`);
-
-    mount("purchase-app", "Purchases", `<div class="topbar"><div><b>New Purchase</b><span>Supplier bill</span></div><span class="abtn">Save</span></div>
-      <div class="body"><div class="card" style="padding:8px"><div class="field"><span>Supplier</span><b>Malabar Mills</b></div><div class="field"><span>Invoice no.</span><b>MM-3391</b></div><div class="field"><span>Date</span><b>27 Sep 2026</b></div><div class="field"><span>Product</span><b>Basmati Rice 25 kg</b></div><div class="field"><span>Quantity</span><b>50</b></div><div class="field"><span>Purchase rate</span><b>₹1,180</b></div><div class="field"><span>GST</span><b>5%</b></div><div class="field"><span>Total</span><b>₹61,950</b></div></div></div>`);
-
-    mount("expense-app", "Reports", `<div class="topbar"><div><b>Expenses</b><span>This month</span></div><span class="abtn">Add expense</span></div>
-      <div class="body"><div class="card"><table><thead><tr><th>Category</th><th>Description</th><th>Date</th><th class="r">Amount</th><th>Method</th></tr></thead><tbody>
-        <tr><td>Rent</td><td>Godown, September</td><td>01 Sep</td><td class="r">₹18,000</td><td>Bank</td></tr>
-        <tr><td>Transport</td><td>Kochi delivery</td><td>18 Sep</td><td class="r">₹2,450</td><td>Cash</td></tr>
-        <tr><td>Utilities</td><td>Electricity</td><td>22 Sep</td><td class="r">₹3,180</td><td>UPI</td></tr>
-      </tbody></table></div><div class="muted" style="margin-top:6px">Notes stay with each expense.</div></div>`);
-
-    mount("reports-app", "Reports", `<div class="topbar"><div><b>Reports</b><span>Harbour Provisions</span></div><div style="display:flex;gap:6px"><span class="ghost">Export PDF</span><span class="ghost">Print Report</span></div></div>
-      <div class="body"><div class="filters"><span>Today</span><span>This Week</span><span class="on">This Month</span><span>Custom</span></div>
-      <div class="kpis six"><div class="kpi"><span>Sales</span><b>₹6,42,180</b></div><div class="kpi"><span>Purchases</span><b>₹3,18,400</b></div><div class="kpi"><span>Expenses</span><b>₹42,600</b></div><div class="kpi"><span>GST</span><b>₹31,240</b></div><div class="kpi"><span>Collections</span><b>₹5,23,540</b></div><div class="kpi"><span>Profit overview</span><b>₹2,81,180</b></div></div>
-      <div class="row2"><div class="card"><h4>Sales</h4>${chart("cRep")}</div><div class="card"><h4>Customer balances</h4><table><tr><td>Rahman Traders</td><td class="r">₹72,900</td></tr><tr><td>Anjali Stores</td><td class="r">₹34,400</td></tr><tr><td>Greenleaf Mart</td><td class="r">₹9,640</td></tr><tr><td>Low stock items</td><td class="r">7</td></tr></table></div></div></div>`);
-
-    mount("upi-app", "Invoices", `<div class="topbar"><div><b>INV-1042</b><span>Anjali Stores · Balance due</span></div><span class="abtn">Print</span></div>
-      <div class="body"><div class="card" style="padding:10px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center"><div><div class="muted">UPI ID</div><b>harbour@okaxis</b><div class="muted" style="margin-top:8px">Amount</div><div style="font-size:18px;font-weight:800">₹13,184</div><div class="muted">Scan to pay</div></div><div class="qr-slot"></div></div></div>`);
-
-    mount("backup-app", "Settings", `<div class="topbar"><div><b>Settings · Backup</b><span>Password-protected file</span></div><span class="abtn">Back up now</span></div>
-      <div class="body"><div class="card" style="padding:8px"><div class="field"><span>Schedule</span><b>Daily</b></div><div class="field"><span>Last backup</span><b>Today, 8:40 PM</b></div><div class="field"><span>Location</span><b>This PC</b></div></div>
-      <div class="card" style="margin-top:6px"><table><thead><tr><th>Backup</th><th>When</th></tr></thead><tbody><tr><td>Manual</td><td>Today 8:40 PM</td></tr><tr><td>Daily</td><td>Yesterday 9:00 PM</td></tr><tr><td>Daily</td><td>26 Sep 9:00 PM</td></tr></tbody></table></div></div>`);
-
-    mount("staff-app", "Staff", `<div class="topbar"><div><b>Staff</b><span>Users and roles</span></div><span class="abtn">Add Staff</span></div>
-      <div class="body"><div class="card"><table><thead><tr><th>Name</th><th>Role</th><th>Mobile</th><th>Status</th></tr></thead><tbody>
-        <tr><td>Anoop Kumar</td><td>Owner</td><td>98460 10001</td><td>${badge("ok","Active")}</td></tr>
-        <tr><td>Meera Joseph</td><td>Manager</td><td>97440 22018</td><td>${badge("ok","Active")}</td></tr>
-        <tr><td>Sajan P</td><td>Cashier</td><td>98951 44110</td><td>${badge("ok","Active")}</td></tr>
-        <tr><td>Fathima Noor</td><td>Staff</td><td>94471 22880</td><td>${badge("ok","Active")}</td></tr>
-      </tbody></table></div></div>`);
-
-    const featureShots = [
-      ["Invoices", "GST Invoices", "HSN, tax and bank details on the sales invoice.", "#billing", `<div class="topbar"><div><b>Invoices</b></div></div><div class="body"><div class="card"><table><tbody>${invoiceRows}</tbody></table></div></div>`],
-      ["Quotations", "Quotations", "Validity date, items and a total the buyer can confirm.", "#quotations", `<div class="topbar"><div><b>QO-208</b><span>Valid 15 Oct</span></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Customer</span><b>Rahman Traders</b></div><div class="field"><span>Total</span><b>₹27,132</b></div></div></div>`],
-      ["Invoices", "UPI QR Payments", "The printed bill carries a QR for the amount due.", "#upi", `<div class="topbar"><div><b>UPI</b><span>₹13,184</span></div></div><div class="body"><div class="qr-slot"></div></div>`],
-      ["Products", "Products & Stock", "Prices, GST and quantities for each item.", "#products", `<div class="topbar"><div><b>Products</b></div></div><div class="body"><div class="card"><table><tr><td>Basmati Rice 25 kg</td><td class="r">86</td><td>${badge("ok","In stock")}</td></tr><tr><td>Sunflower Oil 5 L</td><td class="r">14</td><td>${badge("warn","Low")}</td></tr></table></div></div>`],
-      ["Customers", "Customers", "Balances and the last invoice, beside the directory.", "#customers", `<div class="topbar"><div><b>Customers</b></div></div><div class="body"><div class="card" style="padding:8px"><b>Anjali Stores</b><div class="field"><span>Due</span>₹34,400</div><div class="field"><span>Last bill</span>INV-1042</div></div></div>`],
-      ["Purchases", "Purchases & Expenses", "Supplier bills on one side, shop expenses on the other.", "#purchases", `<div class="topbar"><div><b>Purchase</b></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Malabar Mills</span><b>₹61,950</b></div><div class="field"><span>Rent</span><b>₹18,000</b></div></div></div>`],
-      ["Reports", "Reports & Analytics", "Sales, tax, collections and balances for the period you pick.", "#reports", `<div class="topbar"><div><b>Reports</b></div></div><div class="body">${chart("cFeat")}</div>`],
-      ["Invoices", "Print & PDF", "A tax invoice with company, lines, totals and bank block.", "#print", `<div class="topbar"><div><b>TAX INVOICE</b><span>INV-1042</span></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Anjali Stores</span><b>₹18,450</b></div><div class="field"><span>Bank + UPI</span><b>On the bill</b></div></div></div>`],
-      ["Settings", "Settings & Customization", "Invoice prefix, place of supply, bank account and UPI ID.", "#backup", `<div class="topbar"><div><b>Invoice settings</b></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Prefix</span><b>INV</b></div><div class="field"><span>Place of supply</span><b>Kerala (32)</b></div><div class="field"><span>UPI ID</span><b>harbour@okaxis</b></div></div></div>`]
-    ];
-    document.getElementById("feature-grid").innerHTML = featureShots.map(([active, title, copy, href, inner]) =>
-      `<article class="feat"><div class="app mini">${shell(active)}<div class="pane">${inner}</div></div><h3>${title}</h3><p>${copy}</p><a class="text-link" href="${href}">View →</a></article>`
-    ).join("");
-
-    document.getElementById("film").innerHTML = [
-      ["dashboard", "Dashboard", "Dashboard", dashboard(true, "cFilmDash")],
-      ["billing", "New Sale", "New Sales", `<div class="topbar"><div><b>New Sale</b><span>INV-1043</span></div></div><div class="body"><div class="card"><table><tr><td>Basmati Rice 25 kg</td><td class="r">12</td><td class="r">₹17,400</td></tr><tr><td>Sunflower Oil 5 L</td><td class="r">6</td><td class="r">₹4,680</td></tr></table></div></div>`],
-      ["billing", "Invoice", "Invoices", `<div class="topbar"><div><b>INV-1042</b><span>Anjali Stores</span></div></div><div class="body"><div class="kpis"><div class="kpi"><span>Total</span><b>₹18,450</b></div><div class="kpi"><span>Status</span><b>Paid</b></div><div class="kpi"><span>GST</span><b>5%</b></div><div class="kpi"><span>UPI</span><b>QR</b></div></div></div>`],
-      ["billing", "Quotations", "Quotations", `<div class="topbar"><div><b>QO-208</b></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Valid till</span><b>15 Oct 2026</b></div><div class="field"><span>Total</span><b>₹27,132</b></div></div></div>`],
-      ["inventory", "Products", "Products", `<div class="topbar"><div><b>Products</b></div></div><div class="body"><div class="card"><table><tr><td>Basmati Rice 25 kg</td><td class="r">86</td></tr><tr><td>Sunflower Oil 5 L</td><td class="r">14</td></tr><tr><td>Toor Dal 1 kg</td><td class="r">240</td></tr></table></div></div>`],
-      ["customers", "Customers", "Customers", `<div class="topbar"><div><b>Customers</b></div></div><div class="body"><div class="card" style="padding:8px"><b>Anjali Stores</b><div class="field"><span>Outstanding</span>₹34,400</div></div></div>`],
-      ["billing", "Purchases", "Purchases", `<div class="topbar"><div><b>Purchases</b></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Malabar Mills</span><b>₹61,950</b></div></div></div>`],
-      ["reports", "Reports", "Reports", `<div class="topbar"><div><b>Reports</b></div></div><div class="body">${chart("cFilm")}</div>`],
-      ["reports", "Settings", "Settings", `<div class="topbar"><div><b>Settings</b></div></div><div class="body"><div class="card" style="padding:8px"><div class="field"><span>Invoice prefix</span><b>INV</b></div><div class="field"><span>UPI ID</span><b>harbour@okaxis</b></div></div></div>`]
-    ].map(([cat, label, nav, inner]) => `<figure data-shot="${cat}"><div class="app wide" style="height:340px">${shell(nav)}<div class="pane">${inner}</div></div><figcaption>${label}</figcaption></figure>`).join("");
-
-    document.getElementById("paper").innerHTML = `
-      <h3 class="paper-title">TAX INVOICE</h3>
-      <div class="paper-grid"><div><div class="k">From</div><strong>Harbour Provisions</strong><div class="k">MG Road, Kochi · GSTIN 32AAAAA0000A1Z5</div></div><div><div class="k">Invoice no.</div><strong>INV-1042</strong><div class="k">27 Sep 2026 · Kerala (32)</div></div></div>
-      <div class="paper-grid"><div><div class="k">Bill to</div><strong>Anjali Stores</strong><div class="k">98470 11220</div></div><div><div class="k">Place of supply</div><strong>Kerala (32)</strong></div></div>
-      <table><thead><tr><th>Product</th><th>HSN</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">GST</th><th class="r">Amount</th></tr></thead><tbody>
-        <tr><td>Basmati Rice 25 kg</td><td>1006</td><td class="r">8</td><td class="r">1,450</td><td class="r">5%</td><td class="r">11,600</td></tr>
-        <tr><td>Sunflower Oil 5 L</td><td>1512</td><td class="r">8</td><td class="r">780</td><td class="r">5%</td><td class="r">6,240</td></tr>
-      </tbody></table>
-      <div class="foot"><div><div class="k">Bank</div><strong>Harbour Provisions</strong><div class="k">A/c 123456789012 · IFSC SBIN0001234 · SBI</div><div class="k">UPI harbour@okaxis</div></div><div><div class="field"><span>Subtotal</span><b>₹17,840</b></div><div class="field"><span>CGST</span><b>₹446</b></div><div class="field"><span>SGST</span><b>₹446</b></div><div class="field"><span>Total</span><b>₹18,732</b></div><div class="qr-slot" style="margin-top:8px"></div></div></div>`;
-
-    function qrSvg() {
-      const n = 25;
-      const finder = (x, y, ox, oy) => {
-        if (x < ox || y < oy || x >= ox + 7 || y >= oy + 7) return false;
-        const lx = x - ox, ly = y - oy;
-        return lx === 0 || ly === 0 || lx === 6 || ly === 6 || (lx >= 2 && lx <= 4 && ly >= 2 && ly <= 4);
-      };
-      let s = `<svg class="qr" viewBox="0 0 ${n} ${n}" aria-hidden="true">`;
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        const mark = finder(x, y, 0, 0) || finder(x, y, n - 7, 0) || finder(x, y, 0, n - 7);
-        const quiet = (ox, oy) => x >= ox - 1 && x <= ox + 7 && y >= oy - 1 && y <= oy + 7;
-        const reserved = quiet(0, 0) || quiet(n - 7, 0) || quiet(0, n - 7);
-        const data = !mark && !reserved && ((x * 13 + y * 7 + (x * y)) % 3) !== 0;
-        if (mark || data) s += `<rect x="${x}" y="${y}" width="1" height="1" fill="#0A2147"/>`;
-      }
-      return s + "</svg>";
-    }
-    document.querySelectorAll(".qr-slot").forEach((el) => { el.innerHTML = qrSvg(); });
-
-    const ROLES = {
-      Owner: ["Sales", "Purchases", "Products", "Customers", "Reports", "Expenses", "Settings"],
-      Manager: ["Sales", "Purchases", "Products", "Customers", "Reports", "Expenses"],
-      Cashier: ["Sales", "Customers"],
-      Staff: ["Sales", "Customers"]
-    };
-    const roleList = document.getElementById("role-list");
-    function showRole(name) {
-      roleList.innerHTML = ["Sales", "Purchases", "Products", "Customers", "Reports", "Expenses", "Settings"].map((item) => {
-        const on = ROLES[name].includes(item);
-        return `<li style="opacity:${on ? 1 : 0.35}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8.2 6.2 11.5 13 4.5"/></svg>${item}</li>`;
-      }).join("");
-    }
-    showRole("Owner");
-    document.getElementById("rolebar").addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      document.querySelectorAll("#rolebar button").forEach((b) => b.classList.toggle("on", b === btn));
-      showRole(btn.dataset.role);
-    });
-
-    let scrollFrame = 0;
-    function smoothScrollTo(top) {
-      cancelAnimationFrame(scrollFrame);
-      const root = document.documentElement;
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        root.style.scrollBehavior = "auto";
-        scrollTo(0, top);
-        root.style.scrollBehavior = "";
-        return;
-      }
-      const start = window.scrollY;
-      const change = top - start;
-      if (Math.abs(change) < 2) return;
-      const duration = Math.min(1050, Math.max(520, Math.abs(change) * 0.42));
-      const t0 = performance.now();
-      const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-      root.style.scrollBehavior = "auto";
-      function frame(now) {
-        const p = Math.min(1, (now - t0) / duration);
-        scrollTo(0, start + change * ease(p));
-        if (p < 1) scrollFrame = requestAnimationFrame(frame);
-        else root.style.scrollBehavior = "";
-      }
-      scrollFrame = requestAnimationFrame(frame);
-    }
-    document.addEventListener("click", (event) => {
-      const link = event.target.closest('a[href^="#"]');
-      if (!link) return;
-      const hash = link.getAttribute("href");
-      if (!hash || hash === "#") return;
-      const target = hash === "#top" ? document.getElementById("top") : document.querySelector(hash);
-      if (!target) return;
-      event.preventDefault();
-      const headerHeight = header ? header.offsetHeight : 0;
-      const top = hash === "#top" ? 0 : target.getBoundingClientRect().top + window.scrollY - headerHeight - 12;
-      history.pushState(null, "", hash);
-      smoothScrollTo(Math.max(0, top));
-    });
-
     const header = document.querySelector("header");
-    const onScroll = () => header.classList.toggle("scrolled", window.scrollY > 8);
+    const onScroll = () => header.classList.toggle("light", window.scrollY > 40);
     onScroll();
     addEventListener("scroll", onScroll, { passive: true });
+
     document.querySelector(".menu").addEventListener("click", (e) => {
       const open = document.body.classList.toggle("nav-open");
       e.currentTarget.setAttribute("aria-expanded", String(open));
-      e.currentTarget.setAttribute("aria-label", open ? "Close menu" : "Open menu");
     });
     document.getElementById("nav").addEventListener("click", (e) => {
       if (e.target.closest("a")) document.body.classList.remove("nav-open");
     });
+
+    document.getElementById("tabs").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const name = btn.dataset.shot;
+      document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
+      document.querySelectorAll(".shot-stage img").forEach((img) => img.classList.toggle("on", img.dataset.shot === name));
+    });
+
     document.querySelectorAll(".faq-q").forEach((btn) => {
       btn.addEventListener("click", () => {
         const open = btn.getAttribute("aria-expanded") === "true";
@@ -1256,13 +663,21 @@
         }
       });
     });
-    document.getElementById("tabs").addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
-      const el = document.querySelector(`[data-shot="${btn.dataset.jump}"]`);
-      el?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
-    });
+
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((el) => {
+          if (el.isIntersecting) {
+            el.target.classList.add("show");
+            io.unobserve(el.target);
+          }
+        });
+      }, { threshold: 0.08, rootMargin: "0px 0px -8% 0px" });
+      document.querySelectorAll(".inview").forEach((n) => io.observe(n));
+      setTimeout(() => document.querySelectorAll(".inview").forEach((n) => n.classList.add("show")), 1800);
+    } else {
+      document.querySelectorAll(".inview").forEach((n) => n.classList.add("show"));
+    }
   </script>
 </body>
 </html>
