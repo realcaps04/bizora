@@ -11,6 +11,7 @@ type ReleaseAsset = { name?: string; browser_download_url?: string }
 type Release = { tag_name?: string; assets?: ReleaseAsset[] }
 
 let pending: { version: string; url: string } | null = null
+let installing = false
 
 function versionParts(value: string): number[] {
   return value
@@ -85,54 +86,70 @@ async function readBody(url: string): Promise<string> {
   return Buffer.concat(chunks).toString('utf8')
 }
 
+function currentOffer(): { current: string; latest: string } | null {
+  if (!pending) return null
+  return { current: app.getVersion(), latest: pending.version }
+}
+
 export async function checkForAppUpdate(): Promise<{ current: string; latest: string } | null> {
-  pending = null
+  if (installing) return currentOffer()
   const current = app.getVersion()
   let body = ''
   try {
     body = await readBody(`https://api.github.com/repos/${REPO}/releases/latest`)
   } catch {
-    return null
+    return currentOffer()
   }
-  if (!body) return null
+  if (!body) return currentOffer()
   let release: Release
   try {
     release = JSON.parse(body) as Release
   } catch {
-    return null
+    return currentOffer()
   }
   const latest = String(release.tag_name || '').replace(/^v/i, '')
   const asset = (release.assets || []).find((item) => /Bizora-Setup-.*\.exe$/i.test(item.name || ''))
   const url = asset?.browser_download_url || ''
-  if (!latest || !url || !isNewer(latest, current)) return null
+  if (!latest || !url || !isNewer(latest, current)) {
+    pending = null
+    return null
+  }
   pending = { version: latest, url }
   return { current, latest }
 }
 
 export async function installAppUpdate(onProgress?: (percent: number) => void): Promise<{ version: string }> {
+  if (installing) throw new AppError('The update is already downloading.', 'VALIDATION')
   if (!pending) throw new AppError('No update is ready.', 'NOT_FOUND')
+  installing = true
   const { version, url } = pending
   const dest = path.join(app.getPath('temp'), `Bizora-Setup-${version}.exe`)
-  const res = await request(url, { 'User-Agent': 'Bizora', Accept: 'application/octet-stream' })
-  if (res.statusCode !== 200) {
-    res.resume()
-    throw new AppError('The update could not be downloaded.', 'INTERNAL')
-  }
-  const total = Number(res.headers['content-length']) || 0
-  let received = 0
-  await new Promise<void>((resolve, reject) => {
-    const file = fs.createWriteStream(dest)
-    res.on('data', (chunk: Buffer) => {
-      received += chunk.length
-      if (total > 0) onProgress?.(Math.min(99, Math.round((received / total) * 100)))
+  try {
+    const res = await request(url, { 'User-Agent': 'Bizora', Accept: 'application/octet-stream' })
+    if (res.statusCode !== 200) {
+      res.resume()
+      throw new AppError('The update could not be downloaded.', 'INTERNAL')
+    }
+    const total = Number(res.headers['content-length']) || 0
+    let received = 0
+    await new Promise<void>((resolve, reject) => {
+      const file = fs.createWriteStream(dest)
+      res.on('data', (chunk: Buffer) => {
+        received += chunk.length
+        if (total > 0) onProgress?.(Math.min(99, Math.round((received / total) * 100)))
+      })
+      res.pipe(file)
+      file.on('finish', () => file.close(() => resolve()))
+      file.on('error', reject)
+      res.on('error', reject)
     })
-    res.pipe(file)
-    file.on('finish', () => file.close(() => resolve()))
-    file.on('error', reject)
-    res.on('error', reject)
-  })
+  } catch (error) {
+    installing = false
+    fs.rmSync(dest, { force: true })
+    throw error
+  }
   onProgress?.(100)
-  const child = spawn(dest, [], { detached: true, stdio: 'ignore' })
+  const child = spawn(dest, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true })
   child.unref()
   setTimeout(() => app.quit(), 600)
   return { version }

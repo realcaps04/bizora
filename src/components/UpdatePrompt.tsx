@@ -2,6 +2,17 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui'
 import { callApi } from '@/utils'
 
+const DISMISS_KEY = 'bizora-update-dismissed'
+const CHECK_EVERY_MS = 15 * 60 * 1000
+
+function dismissedVersion(): string {
+  try {
+    return sessionStorage.getItem(DISMISS_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
 export function UpdatePrompt() {
   const [offer, setOffer] = useState<{ current: string; latest: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -10,12 +21,33 @@ export function UpdatePrompt() {
 
   useEffect(() => {
     if (!window.bizora?.checkForUpdate) return
-    void callApi(() => window.bizora.checkForUpdate())
-      .then((update) => {
-        if (update) setOffer(update)
-      })
-      .catch(() => {})
-  }, [])
+    let stopped = false
+    let checking = false
+
+    async function look() {
+      if (stopped || checking || busy || !navigator.onLine) return
+      checking = true
+      try {
+        const update = await callApi(() => window.bizora.checkForUpdate())
+        if (stopped || !update || update.latest === dismissedVersion()) return
+        setOffer(update)
+      } catch {
+        // No connection, or GitHub did not answer. The next online event retries.
+      } finally {
+        checking = false
+      }
+    }
+
+    void look()
+    const timer = window.setInterval(() => void look(), CHECK_EVERY_MS)
+    const onOnline = () => void look()
+    window.addEventListener('online', onOnline)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [busy])
 
   useEffect(() => {
     if (!offer || !window.bizora.onUpdateProgress) return
@@ -35,6 +67,15 @@ export function UpdatePrompt() {
     }
   }
 
+  function later() {
+    try {
+      sessionStorage.setItem(DISMISS_KEY, offer?.latest || '')
+    } catch {
+      // The prompt stays closed for this visit even if storage is blocked.
+    }
+    setOffer(null)
+  }
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-md rounded-lg border border-border bg-white shadow-xl">
@@ -46,7 +87,7 @@ export function UpdatePrompt() {
             Bizora {offer.latest} is the latest version. This computer is running {offer.current}.
           </p>
           <p className="mt-2 text-ink-muted">
-            The update replaces the program. Your bills and records stay on this PC.
+            The update installs from this app and then Bizora restarts. Your bills and records stay on this PC.
           </p>
           {busy ? (
             <p className="mt-3 font-medium">
@@ -56,7 +97,7 @@ export function UpdatePrompt() {
           {error ? <p className="mt-3 text-danger">{error}</p> : null}
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-          <Button variant="outline" disabled={busy} onClick={() => setOffer(null)}>
+          <Button variant="outline" disabled={busy} onClick={later}>
             Later
           </Button>
           <Button disabled={busy} onClick={() => void update()}>
