@@ -114,6 +114,7 @@ function InvoiceTable({ rows }: { rows: Invoice[] }) {
             <th className="px-4 py-2.5 font-medium text-right">Amount</th>
             <th className="px-4 py-2.5 font-medium">Status</th>
             <th className="px-4 py-2.5 font-medium">Created By</th>
+            <th className="px-4 py-2.5 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -133,6 +134,17 @@ function InvoiceTable({ rows }: { rows: Invoice[] }) {
                 <Badge tone={statusTone(inv.payment_status) as never}>{inv.payment_status}</Badge>
               </td>
               <td className="px-4 py-2.5">{inv.created_by_name || '—'}</td>
+              <td className="px-4 py-2.5">
+                {inv.status === 'cancelled' ? (
+                  '—'
+                ) : (
+                  <Link to={`/invoices/${inv.id}/edit`}>
+                    <Button size="sm" variant="outline">
+                      Edit
+                    </Button>
+                  </Link>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -213,6 +225,11 @@ export function InvoiceDetailPage() {
           <Button variant="outline" onClick={() => window.print()}>
             Print / PDF
           </Button>
+          {invoice.status !== 'cancelled' ? (
+            <Button variant="outline" onClick={() => navigate(`/invoices/${id}/edit`)}>
+              Edit
+            </Button>
+          ) : null}
           {invoice.status !== 'cancelled' ? (
             <Button variant="danger" onClick={() => setCancelOpen(true)}>
               Cancel Invoice

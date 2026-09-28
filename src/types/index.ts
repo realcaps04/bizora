@@ -115,6 +115,7 @@ export interface BizoraApi {
   listInvoices: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   getInvoice: (id: string) => Promise<ApiResult<unknown>>
   createInvoice: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
+  updateInvoice: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   cancelInvoice: (id: string) => Promise<ApiResult<unknown>>
   nextInvoiceNumber: () => Promise<ApiResult<string>>
   listQuotations: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>

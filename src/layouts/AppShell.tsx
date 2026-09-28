@@ -82,6 +82,8 @@ export function AppShell() {
       path.startsWith('/sales/new') ||
       path.startsWith('/purchases/new') ||
       path.startsWith('/quotations/new') ||
+      /\/invoices\/[^/]+\/edit$/.test(path) ||
+      /\/quotations\/[^/]+\/edit$/.test(path) ||
       path.startsWith('/products/new') ||
       path.startsWith('/products/bulk') ||
       /\/products\/[^/]+\/edit$/.test(path)
@@ -98,10 +100,14 @@ export function AppShell() {
   const composeRouteKey =
     location.pathname === '/sales/new'
       ? '/sales/new'
+      : /\/invoices\/[^/]+\/edit$/.test(location.pathname)
+        ? location.pathname
       : location.pathname === '/purchases/new'
         ? '/purchases/new'
-        : location.pathname === '/quotations/new'
-          ? '/quotations/new'
+        : location.pathname === '/quotations/new' || /\/quotations\/[^/]+\/edit$/.test(location.pathname)
+          ? location.pathname === '/quotations/new'
+            ? '/quotations/new'
+            : location.pathname
           : location.pathname === '/products/new'
             ? '/products/new'
             : location.pathname === '/products/bulk'

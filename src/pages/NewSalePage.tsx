@@ -47,6 +47,12 @@ function rateFromAmount(amount: number, qty: number, discount: number, taxRate: 
   return round2(Math.max(0, (taxable + discount) / q))
 }
 
+function splitStoredName(name: string): { productName: string; specification: string } {
+  const match = name.match(/^(.*) \(([^)]+)\)$/)
+  if (match) return { productName: match[1], specification: match[2] }
+  return { productName: name, specification: 'Pcs' }
+}
+
 function emptyLine(): LineItem {
   return {
     key: `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -66,7 +72,7 @@ function formatDisplayDate(iso: string) {
   return `${d}-${m}-${y}`
 }
 
-export function NewSalePage() {
+export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   const navigate = useNavigate()
   const { showToast } = useAppStore()
   const productSearchRef = useRef<HTMLInputElement>(null)
@@ -127,14 +133,63 @@ export function NewSalePage() {
 
   useEffect(() => {
     void (async () => {
-      const [num, cust] = await Promise.all([
-        callApi(() => window.bizora.nextInvoiceNumber()),
-        callApi(() => window.bizora.listCustomers({ pageSize: 200 })),
-      ])
-      setInvoiceNumber(num as string)
+      const tasks: Promise<unknown>[] = [callApi(() => window.bizora.listCustomers({ pageSize: 200 }))]
+      if (!invoiceId) tasks.unshift(callApi(() => window.bizora.nextInvoiceNumber()))
+      const result = await Promise.all(tasks)
+      if (!invoiceId) setInvoiceNumber(result[0] as string)
+      const cust = invoiceId ? result[0] : result[1]
       setCustomers(((cust as { rows: Customer[] }).rows) || [])
     })()
-  }, [])
+  }, [invoiceId])
+
+  useEffect(() => {
+    if (!invoiceId) return
+    void (async () => {
+      try {
+        const data = (await callApi(() => window.bizora.getInvoice(invoiceId))) as {
+          invoice: Record<string, unknown>
+          items: Record<string, unknown>[]
+          customer?: Record<string, unknown> | null
+        }
+        if (data.invoice.status === 'cancelled') {
+          showToast('Cancelled invoices cannot be edited', 'error')
+          navigate(`/invoices/${invoiceId}`)
+          return
+        }
+        setInvoiceNumber(String(data.invoice.invoice_number || ''))
+        setInvoiceDate(String(data.invoice.invoice_date || '').slice(0, 10))
+        setCustomerId(data.invoice.customer_id ? String(data.invoice.customer_id) : '')
+        setCustomerQuery(String(data.invoice.customer_name || ''))
+        setPaymentMethod(String(data.invoice.payment_method || 'Cash'))
+        setPaidAmount(Number(data.invoice.paid_amount) || 0)
+        setPaidTouched(true)
+        if (data.customer) {
+          const parsed = parseAddress(data.customer.address ? String(data.customer.address) : '')
+          setHouseName(parsed.houseName)
+          setPlace(parsed.place)
+          setGstin(data.customer.gstin ? String(data.customer.gstin) : '')
+        }
+        const lines = data.items.map((row) => {
+          const named = splitStoredName(String(row.product_name || ''))
+          return {
+            key: String(row.id || emptyLine().key),
+            productId: row.product_id ? String(row.product_id) : undefined,
+            productName: named.productName,
+            specification: named.specification,
+            hsn: row.hsn ? String(row.hsn) : '',
+            qty: Number(row.qty) || 1,
+            rate: Number(row.rate) || 0,
+            discount: Number(row.discount) || 0,
+            taxRate: Number(row.tax_rate) || 0,
+          }
+        })
+        setItems(lines.length ? lines : [emptyLine()])
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Unable to open this invoice', 'error')
+        navigate('/invoices')
+      }
+    })()
+  }, [invoiceId, navigate, showToast])
 
   useEffect(() => {
     if (!productQuery.trim()) {
@@ -310,30 +365,31 @@ export function NewSalePage() {
     }
     setSaving(true)
     try {
+      const payload = {
+        customerId: customerId || undefined,
+        customerName: selectedCustomer?.name || customerQuery || 'Walk-in Customer',
+        invoiceDate,
+        paymentMethod,
+        interState: totals.interState,
+        paidAmount: mode === 'draft' ? 0 : paidAmount,
+        status: mode === 'draft' ? 'draft' : 'confirmed',
+        items: filledItems.map((i) => ({
+          productId: i.productId,
+          productName: i.specification.trim()
+            ? `${i.productName} (${i.specification.trim()})`
+            : i.productName,
+          hsn: i.hsn || undefined,
+          qty: i.qty,
+          rate: i.rate,
+          discount: i.discount,
+          taxRate: i.taxRate,
+        })),
+      }
       const result = await callApi(() =>
-        window.bizora.createInvoice({
-          customerId: customerId || undefined,
-          customerName: selectedCustomer?.name || customerQuery || 'Walk-in Customer',
-          invoiceDate,
-          paymentMethod,
-          interState: totals.interState,
-          paidAmount: mode === 'draft' ? 0 : paidAmount,
-          status: mode === 'draft' ? 'draft' : 'confirmed',
-          items: filledItems.map((i) => ({
-            productId: i.productId,
-            productName: i.specification.trim()
-              ? `${i.productName} (${i.specification.trim()})`
-              : i.productName,
-            hsn: i.hsn || undefined,
-            qty: i.qty,
-            rate: i.rate,
-            discount: i.discount,
-            taxRate: i.taxRate,
-          })),
-        }),
+        invoiceId ? window.bizora.updateInvoice({ id: invoiceId, ...payload }) : window.bizora.createInvoice(payload),
       )
       const invoice = (result as { invoice: { id: string } }).invoice
-      showToast(mode === 'draft' ? 'Draft saved' : 'Invoice generated', 'success')
+      showToast(invoiceId ? 'Invoice updated' : mode === 'draft' ? 'Draft saved' : 'Invoice generated', 'success')
       if (mode === 'print' || mode === 'pdf') {
         navigate(`/invoices/${invoice.id}?print=1`)
       } else if (mode === 'draft') {
@@ -374,8 +430,12 @@ export function NewSalePage() {
               <FileText size={20} strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[18px] font-bold tracking-tight text-[#031C45]">Sales Invoice</h1>
-              <p className="mt-0.5 text-[13px] text-[#62789A]">Create a new sales invoice.</p>
+              <h1 className="text-[18px] font-bold tracking-tight text-[#031C45]">
+                {invoiceId ? 'Edit invoice' : 'Sales Invoice'}
+              </h1>
+              <p className="mt-0.5 text-[13px] text-[#62789A]">
+                {invoiceId ? 'Update this invoice. The invoice number stays the same.' : 'Create a new sales invoice.'}
+              </p>
             </div>
           </div>
 
@@ -765,7 +825,7 @@ export function NewSalePage() {
                 Save Draft
               </Button>
               <Button type="button" disabled={saving} onClick={() => void save('generate')}>
-                <FileText size={14} /> Generate Invoice
+                <FileText size={14} /> {invoiceId ? 'Save changes' : 'Generate Invoice'}
               </Button>
             </div>
           </div>

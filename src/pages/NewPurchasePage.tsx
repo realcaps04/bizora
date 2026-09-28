@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, FileText, Plus, Printer, Search, Settings, Trash2, Truck } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
@@ -78,6 +79,20 @@ export function NewPurchasePage() {
   const navigate = useNavigate()
   const { showToast } = useAppStore()
   const productSearchRef = useRef<HTMLInputElement>(null)
+  const productAnchor = useRef<HTMLElement | null>(null)
+  const [productMenu, setProductMenu] = useState<{ top: number; left: number; width: number } | null>(null)
+
+  function placeProductMenu(el?: HTMLElement | null) {
+    const node = el ?? productAnchor.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    const width = Math.min(420, Math.max(rect.width, 280))
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8)
+    const menuHeight = 224
+    const spaceBelow = window.innerHeight - rect.bottom
+    const top = spaceBelow < 160 && rect.top > spaceBelow ? Math.max(8, rect.top - 4 - menuHeight) : rect.bottom + 4
+    setProductMenu({ top, left, width })
+  }
 
   const [purchaseNumber, setPurchaseNumber] = useState('…')
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
@@ -143,6 +158,23 @@ export function NewPurchasePage() {
     }, 150)
     return () => clearTimeout(t)
   }, [productQuery])
+
+  useEffect(() => {
+    const headerOpen = Boolean(productQuery.trim() && !activeRowKey && productResults.length)
+    const rowOpen = Boolean(activeRowKey && productResults.length)
+    if (!headerOpen && !rowOpen) {
+      setProductMenu(null)
+      return
+    }
+    placeProductMenu(rowOpen ? productAnchor.current : productSearchRef.current)
+    const onMove = () => placeProductMenu(rowOpen ? productAnchor.current : productSearchRef.current)
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', onMove)
+    return () => {
+      window.removeEventListener('scroll', onMove, true)
+      window.removeEventListener('resize', onMove)
+    }
+  }, [activeRowKey, productResults, productQuery])
 
   const filledItems = useMemo(
     () => items.filter((i) => i.productName.trim() && i.productId && i.qty > 0),
@@ -455,8 +487,15 @@ export function NewPurchasePage() {
                   ref={productSearchRef}
                   value={productQuery}
                   onChange={(e) => {
+                    productAnchor.current = e.currentTarget
                     setProductQuery(e.target.value)
                     setActiveRowKey(null)
+                    placeProductMenu(e.currentTarget)
+                  }}
+                  onFocus={(e) => {
+                    productAnchor.current = e.currentTarget
+                    setActiveRowKey(null)
+                    if (productQuery.trim()) placeProductMenu(e.currentTarget)
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && productResults[0]) {
@@ -467,21 +506,6 @@ export function NewPurchasePage() {
                   placeholder="Search product"
                   className="h-9 w-[220px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                 />
-                {productQuery && !activeRowKey && productResults.length > 0 ? (
-                  <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-[320px] max-h-52 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
-                    {productResults.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-[#F5F9FF]"
-                        onClick={() => addProductFromSearch(p)}
-                      >
-                        <span>{p.name}</span>
-                        <span className="tabular-nums text-[#62789A]">{formatMoney(p.purchase_rate)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
               </div>
               <Button type="button" onClick={() => setItems((prev) => [...prev, emptyLine()])}>
                 <Plus size={14} /> Add Item
@@ -511,37 +535,25 @@ export function NewPurchasePage() {
                   return (
                     <tr key={item.key} className="border-t border-[#E8EEF5]">
                       <td className="px-3 py-2 text-[#62789A]">{idx + 1}</td>
-                      <td className="relative px-3 py-2">
+                      <td className="px-3 py-2">
                         <input
                           value={item.productName}
                           onChange={(e) => {
+                            productAnchor.current = e.currentTarget
                             updateItem(item.key, { productName: e.target.value, productId: undefined })
                             setActiveRowKey(item.key)
                             setProductQuery(e.target.value)
+                            placeProductMenu(e.currentTarget)
                           }}
-                          onFocus={() => {
+                          onFocus={(e) => {
+                            productAnchor.current = e.currentTarget
                             setActiveRowKey(item.key)
                             if (item.productName) setProductQuery(item.productName)
+                            placeProductMenu(e.currentTarget)
                           }}
                           placeholder="Type or search product..."
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"
                         />
-                        {activeRowKey === item.key && productResults.length > 0 ? (
-                          <div className="absolute left-3 right-3 top-[calc(100%-2px)] z-20 max-h-40 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
-                            {productResults.map((p) => (
-                              <button
-                                key={p.id}
-                                type="button"
-                                className="flex w-full items-center justify-between px-3 py-2 text-left text-[12.5px] hover:bg-[#F5F9FF]"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => applyProduct(item.key, p)}
-                              >
-                                <span>{p.name}</span>
-                                <span className="tabular-nums text-[#62789A]">{formatMoney(p.purchase_rate)}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -761,6 +773,28 @@ export function NewPurchasePage() {
           </Field>
         </div>
       </Modal>
+      {productMenu && productResults.length > 0
+        ? createPortal(
+            <div
+              className="fixed z-[80] max-h-56 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg"
+              style={{ top: productMenu.top, left: productMenu.left, width: productMenu.width }}
+            >
+              {productResults.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-[12.5px] hover:bg-[#F5F9FF]"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => (activeRowKey ? applyProduct(activeRowKey, p) : addProductFromSearch(p))}
+                >
+                  <span className="min-w-0 whitespace-normal">{p.name}</span>
+                  <span className="shrink-0 tabular-nums text-[#62789A]">{formatMoney(p.purchase_rate)}</span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

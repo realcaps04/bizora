@@ -58,6 +58,7 @@ const api = {
   listInvoices: (opts?: Record<string, unknown>) => invoke(IpcChannels.INVOICES_LIST, opts),
   getInvoice: (id: string) => invoke(IpcChannels.INVOICES_GET, { id }),
   createInvoice: (data: Record<string, unknown>) => invoke(IpcChannels.INVOICES_CREATE, data),
+  updateInvoice: (data: Record<string, unknown>) => invoke(IpcChannels.INVOICES_UPDATE, data),
   cancelInvoice: (id: string) => invoke(IpcChannels.INVOICES_CANCEL, { id }),
   nextInvoiceNumber: () => invoke<string>(IpcChannels.INVOICES_NEXT_NUMBER),
   listQuotations: (opts?: Record<string, unknown>) => invoke(IpcChannels.QUOTATIONS_LIST, opts),

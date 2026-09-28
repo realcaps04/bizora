@@ -56,6 +56,37 @@ function rateFromAmount(amount: number, qty: number, discount: number, taxRate: 
   return round2(Math.max(0, (taxable + discount) / q))
 }
 
+function splitStoredName(name: string): { productName: string; specification: string } {
+  const match = name.match(/^(.*) \(([^)]+)\)$/)
+  if (match) return { productName: match[1], specification: match[2] }
+  return { productName: name, specification: '' }
+}
+
+function parseQuotationNotes(raw: string) {
+  const parsed = {
+    notes: '',
+    terms: DEFAULT_TERMS,
+    remarks: '',
+    reference: '',
+    quotationType: 'Standard',
+    salesPerson: '',
+    gstin: '',
+  }
+  if (!raw.trim()) return parsed
+  for (const block of raw.split(/\n\n/)) {
+    if (block.startsWith('Notes:')) parsed.notes = block.replace(/^Notes:\s*/, '').trim()
+    else if (block.startsWith('Terms & Conditions:')) parsed.terms = block.replace(/^Terms & Conditions:\s*/, '').trim()
+    else if (block.startsWith('Internal remarks:')) parsed.remarks = block.replace(/^Internal remarks:\s*/, '').trim()
+    else if (block.startsWith('Reference:')) parsed.reference = block.replace(/^Reference:\s*/, '').trim()
+    else if (block.startsWith('Type:')) parsed.quotationType = block.replace(/^Type:\s*/, '').trim() || 'Standard'
+    else if (block.startsWith('Sales person:')) parsed.salesPerson = block.replace(/^Sales person:\s*/, '').trim()
+    else if (block.startsWith('GSTIN:')) parsed.gstin = block.replace(/^GSTIN:\s*/, '').trim()
+    else if (block === 'Saved as draft') continue
+    else if (!parsed.notes) parsed.notes = block.trim()
+  }
+  return parsed
+}
+
 function emptyLine(): LineItem {
   return {
     key: `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -79,7 +110,7 @@ function addDaysIso(iso: string, days: number) {
   return d.toISOString().slice(0, 10)
 }
 
-export function NewQuotationPage() {
+export function NewQuotationPage({ quotationId }: { quotationId?: string } = {}) {
   const navigate = useNavigate()
   const { showToast } = useAppStore()
   const productSearchRef = useRef<HTMLInputElement>(null)
@@ -109,6 +140,7 @@ export function NewQuotationPage() {
   const [quotationType, setQuotationType] = useState('Standard')
   const [reference, setReference] = useState('')
   const [salesPersonId, setSalesPersonId] = useState('')
+  const [pendingSalesPerson, setPendingSalesPerson] = useState('')
   const [notes, setNotes] = useState('')
   const [terms, setTerms] = useState(DEFAULT_TERMS)
   const [status, setStatus] = useState('draft')
@@ -145,12 +177,16 @@ export function NewQuotationPage() {
 
   useEffect(() => {
     void (async () => {
-      const [num, cust, staffList] = await Promise.all([
-        callApi(() => window.bizora.nextQuotationNumber()),
+      const tasks: Promise<unknown>[] = [
         callApi(() => window.bizora.listCustomers({ pageSize: 200 })),
         callApi(() => window.bizora.listStaff()).catch(() => []),
-      ])
-      setQuotationNumber(num as string)
+      ]
+      if (!quotationId) tasks.unshift(callApi(() => window.bizora.nextQuotationNumber()))
+      const result = await Promise.all(tasks)
+      const num = quotationId ? null : result[0]
+      const cust = quotationId ? result[0] : result[1]
+      const staffList = quotationId ? result[1] : result[2]
+      if (!quotationId) setQuotationNumber(num as string)
       setCustomers(((cust as { rows: Customer[] }).rows) || [])
       const rows = Array.isArray(staffList)
         ? staffList
@@ -162,7 +198,70 @@ export function NewQuotationPage() {
         })),
       )
     })()
-  }, [])
+  }, [quotationId])
+
+  useEffect(() => {
+    if (!quotationId) return
+    void (async () => {
+      try {
+        const data = (await callApi(() => window.bizora.getQuotation(quotationId))) as {
+          quotation: Record<string, unknown>
+          items: Record<string, unknown>[]
+          customer?: Record<string, unknown> | null
+        }
+        if (data.quotation.status === 'converted') {
+          showToast('Converted quotations cannot be edited', 'error')
+          navigate(`/quotations/${quotationId}`)
+          return
+        }
+        const q = data.quotation
+        setQuotationNumber(String(q.quotation_number || ''))
+        setQuotationDate(String(q.quotation_date || '').slice(0, 10))
+        setValidUntil(q.valid_until ? String(q.valid_until).slice(0, 10) : addDaysIso(String(q.quotation_date || todayIso()), 7))
+        setCustomerId(q.customer_id ? String(q.customer_id) : '')
+        setCustomerQuery(String(q.customer_name || ''))
+        setStatus(String(q.status || 'draft'))
+        const parsed = parseQuotationNotes(String(q.notes || ''))
+        setNotes(parsed.notes)
+        setTerms(parsed.terms || DEFAULT_TERMS)
+        setRemarks(parsed.remarks)
+        setReference(parsed.reference)
+        setQuotationType(parsed.quotationType || 'Standard')
+        if (parsed.gstin) setGstin(parsed.gstin)
+        if (parsed.salesPerson) setPendingSalesPerson(parsed.salesPerson)
+        if (data.customer) {
+          const address = parseAddress(data.customer.address ? String(data.customer.address) : '')
+          setHouseName(address.houseName)
+          setPlace(address.place)
+          if (!parsed.gstin && data.customer.gstin) setGstin(String(data.customer.gstin))
+        }
+        const lines = data.items.map((row) => {
+          const named = splitStoredName(String(row.product_name || ''))
+          return {
+            key: String(row.id || emptyLine().key),
+            productId: row.product_id ? String(row.product_id) : undefined,
+            productName: named.productName,
+            specification: named.specification,
+            hsn: row.hsn ? String(row.hsn) : '',
+            qty: Number(row.qty) || 1,
+            rate: Number(row.rate) || 0,
+            discount: Number(row.discount) || 0,
+            taxRate: Number(row.tax_rate) || 0,
+          }
+        })
+        setItems(lines.length ? lines : [emptyLine()])
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Unable to open this quotation', 'error')
+        navigate('/quotations')
+      }
+    })()
+  }, [quotationId, navigate, showToast])
+
+  useEffect(() => {
+    if (!pendingSalesPerson) return
+    const match = staff.find((person) => person.name === pendingSalesPerson)
+    if (match) setSalesPersonId(match.id)
+  }, [staff, pendingSalesPerson])
 
   useEffect(() => {
     if (!productQuery.trim()) {
@@ -347,29 +446,32 @@ export function NewQuotationPage() {
     }
     setSaving(true)
     try {
+      const payload = {
+        customerId: customerId || undefined,
+        customerName: selectedCustomer?.name || customerQuery || 'Customer',
+        quotationDate,
+        validUntil,
+        status: mode === 'draft' ? 'draft' : status === 'draft' ? 'sent' : status,
+        notes: buildNotes(mode === 'draft' ? 'draft' : 'generate'),
+        items: filledItems.map((i) => ({
+          productId: i.productId,
+          productName: i.specification.trim()
+            ? `${i.productName} (${i.specification.trim()})`
+            : i.productName,
+          hsn: i.hsn || undefined,
+          qty: i.qty,
+          rate: i.rate,
+          discount: i.discount,
+          taxRate: i.taxRate,
+        })),
+      }
       const result = await callApi(() =>
-        window.bizora.createQuotation({
-          customerId: customerId || undefined,
-          customerName: selectedCustomer?.name || customerQuery || 'Customer',
-          quotationDate,
-          validUntil,
-          status: mode === 'draft' ? 'draft' : status === 'draft' ? 'sent' : status,
-          notes: buildNotes(mode === 'draft' ? 'draft' : 'generate'),
-          items: filledItems.map((i) => ({
-            productId: i.productId,
-            productName: i.specification.trim()
-              ? `${i.productName} (${i.specification.trim()})`
-              : i.productName,
-            hsn: i.hsn || undefined,
-            qty: i.qty,
-            rate: i.rate,
-            discount: i.discount,
-            taxRate: i.taxRate,
-          })),
-        }),
+        quotationId
+          ? window.bizora.updateQuotation({ id: quotationId, ...payload })
+          : window.bizora.createQuotation(payload),
       )
       const quotation = (result as { quotation: { id: string } }).quotation
-      showToast(mode === 'draft' ? 'Draft saved' : 'Quotation generated', 'success')
+      showToast(quotationId ? 'Quotation updated' : mode === 'draft' ? 'Draft saved' : 'Quotation generated', 'success')
       if (mode === 'print' || mode === 'pdf') {
         navigate(`/quotations/${quotation.id}?print=1`)
       } else {
@@ -408,8 +510,14 @@ export function NewQuotationPage() {
               <FileText size={20} strokeWidth={1.75} />
             </div>
             <div>
-              <h1 className="text-[18px] font-bold tracking-tight text-[#031C45]">Quotation</h1>
-              <p className="mt-0.5 text-[13px] text-[#62789A]">Create a new quotation for your customer</p>
+              <h1 className="text-[18px] font-bold tracking-tight text-[#031C45]">
+                {quotationId ? 'Edit quotation' : 'Quotation'}
+              </h1>
+              <p className="mt-0.5 text-[13px] text-[#62789A]">
+                {quotationId
+                  ? 'Update this quotation. The quotation number stays the same.'
+                  : 'Create a new quotation for your customer'}
+              </p>
             </div>
           </div>
 
@@ -839,7 +947,7 @@ export function NewQuotationPage() {
                 Save Draft
               </Button>
               <Button type="button" disabled={saving} onClick={() => void save('generate')}>
-                <FileText size={14} /> Generate Quotation
+                <FileText size={14} /> {quotationId ? 'Save changes' : 'Generate Quotation'}
               </Button>
             </div>
           </div>

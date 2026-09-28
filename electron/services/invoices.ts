@@ -305,6 +305,185 @@ export function createInvoice(input: {
   return getInvoice(invoiceId)
 }
 
+export function updateInvoice(id: string, input: Omit<Parameters<typeof createInvoice>[0], never>) {
+  const user = requirePermission('invoices.edit')
+  const existing = queryOne<Record<string, unknown>>('SELECT * FROM invoices WHERE id = ? AND company_id = ?', [
+    id,
+    user.companyId,
+  ])
+  if (!existing) throw new AppError('Invoice not found.', 'NOT_FOUND')
+  if (existing.status === 'cancelled') throw new AppError('Cancelled invoices cannot be edited.', 'VALIDATION')
+  if (!input.items?.length) throw new AppError('Add at least one product to the invoice.', 'VALIDATION')
+
+  const status = input.status === 'draft' ? 'draft' : 'confirmed'
+  const ts = now()
+  const invoiceDate = input.invoiceDate || String(existing.invoice_date || ts.slice(0, 10))
+  let customerName = input.customerName || String(existing.customer_name || 'Walk-in Customer')
+  if (input.customerId) {
+    const c = queryOne<{ name: string }>('SELECT name FROM customers WHERE id = ? AND company_id = ?', [
+      input.customerId,
+      user.companyId,
+    ])
+    if (!c) throw new AppError('Customer not found.', 'NOT_FOUND')
+    customerName = c.name
+  }
+
+  const calculated = input.items.map(calcItem)
+  const subtotal = round2(calculated.reduce((s, i) => s + i.qty * i.rate, 0))
+  const lineDiscount = round2(calculated.reduce((s, i) => s + i.discount, 0))
+  const extraDiscount = Number(input.discountAmount) || 0
+  const discountAmount = round2(lineDiscount + extraDiscount)
+  const taxable = round2(Math.max(0, calculated.reduce((s, i) => s + i.afterDiscount, 0) - extraDiscount))
+  const totalTax = round2(calculated.reduce((s, i) => s + i.taxAmount, 0))
+
+  let cgst = 0
+  let sgst = 0
+  let igst = 0
+  if (input.interState) {
+    igst = totalTax
+  } else {
+    cgst = round2(totalTax / 2)
+    sgst = round2(totalTax / 2)
+  }
+
+  const beforeRound = taxable + totalTax
+  const grandTotal = Math.round(beforeRound)
+  const roundOff = round2(grandTotal - beforeRound)
+
+  let paidAmount = Number(input.paidAmount)
+  if (Number.isNaN(paidAmount)) paidAmount = Number(existing.paid_amount) || 0
+  paidAmount = Math.min(grandTotal, Math.max(0, paidAmount))
+
+  let paymentStatus: 'paid' | 'partial' | 'unpaid' = 'unpaid'
+  if (paidAmount >= grandTotal && grandTotal > 0) paymentStatus = 'paid'
+  else if (paidAmount > 0) paymentStatus = 'partial'
+
+  const previousProducts = queryAll<{ product_id: string | null }>(
+    'SELECT product_id FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
+    [id, user.companyId],
+  )
+
+  withTransaction(() => {
+    const oldItems = queryAll<{ product_id: string | null; qty: number }>(
+      'SELECT product_id, qty FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
+      [id, user.companyId],
+    )
+    for (const item of oldItems) {
+      if (!item.product_id) continue
+      run('UPDATE products SET current_stock = current_stock + ?, updated_at = ? WHERE id = ? AND company_id = ?', [
+        item.qty,
+        ts,
+        item.product_id,
+        user.companyId,
+      ])
+    }
+    run(`DELETE FROM stock_movements WHERE company_id = ? AND reference_type = 'invoice' AND reference_id = ?`, [
+      user.companyId,
+      id,
+    ])
+    run('DELETE FROM invoice_items WHERE invoice_id = ? AND company_id = ?', [id, user.companyId])
+    run('DELETE FROM payments WHERE invoice_id = ? AND company_id = ?', [id, user.companyId])
+
+    run(
+      `UPDATE invoices SET
+        customer_id = ?, customer_name = ?, invoice_date = ?, status = ?, payment_status = ?, payment_method = ?,
+        subtotal = ?, discount_amount = ?, taxable_amount = ?, cgst = ?, sgst = ?, igst = ?, round_off = ?,
+        grand_total = ?, paid_amount = ?, notes = ?, updated_at = ?
+       WHERE id = ? AND company_id = ?`,
+      [
+        input.customerId ?? null,
+        customerName,
+        invoiceDate,
+        status,
+        paymentStatus,
+        input.paymentMethod ?? null,
+        subtotal,
+        discountAmount,
+        taxable,
+        cgst,
+        sgst,
+        igst,
+        roundOff,
+        grandTotal,
+        paidAmount,
+        input.notes === undefined ? (existing.notes ?? null) : input.notes,
+        ts,
+        id,
+        user.companyId,
+      ],
+    )
+
+    input.items.forEach((item, idx) => {
+      const calc = calculated[idx]
+      run(
+        `INSERT INTO invoice_items (
+          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          generateId(),
+          user.companyId,
+          id,
+          item.productId ?? null,
+          item.productName,
+          item.hsn ?? null,
+          calc.qty,
+          calc.rate,
+          calc.discount,
+          calc.taxRate,
+          calc.taxAmount,
+          calc.amount,
+          idx,
+        ],
+      )
+      if (item.productId) {
+        const product = queryOne<{ current_stock: number }>('SELECT current_stock FROM products WHERE id = ? AND company_id = ?', [
+          item.productId,
+          user.companyId,
+        ])
+        if (!product) throw new AppError(`Product not found: ${item.productName}`, 'NOT_FOUND')
+        run('UPDATE products SET current_stock = current_stock - ?, updated_at = ? WHERE id = ? AND company_id = ?', [
+          calc.qty,
+          ts,
+          item.productId,
+          user.companyId,
+        ])
+        run(
+          `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, reference_id, created_by, created_at)
+           VALUES (?, ?, ?, 'sale', ?, 'invoice', ?, ?, ?)`,
+          [generateId(), user.companyId, item.productId, -calc.qty, id, user.id, ts],
+        )
+      }
+    })
+
+    if (paidAmount > 0) {
+      run(
+        `INSERT INTO payments (id, company_id, invoice_id, customer_id, customer_name, payment_date, method, amount, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          generateId(),
+          user.companyId,
+          id,
+          input.customerId ?? null,
+          customerName,
+          invoiceDate,
+          input.paymentMethod || 'Cash',
+          paidAmount,
+          user.id,
+          ts,
+        ],
+      )
+    }
+
+    writeAudit(user.companyId, user, 'invoice.updated', 'invoices', id, `Invoice ${existing.invoice_number} updated`)
+  })
+
+  const touched = new Set<string>()
+  for (const row of previousProducts) if (row.product_id) touched.add(row.product_id)
+  for (const item of input.items) if (item.productId) touched.add(item.productId)
+  for (const productId of touched) syncProductById(productId)
+  return getInvoice(id)
+}
+
 export function cancelInvoice(id: string) {
   const user = requirePermission('invoices.cancel')
   const invoice = queryOne<Record<string, unknown>>('SELECT * FROM invoices WHERE id = ? AND company_id = ?', [id, user.companyId])

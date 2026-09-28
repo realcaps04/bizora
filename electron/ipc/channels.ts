@@ -39,6 +39,7 @@ export const IpcChannels = {
   INVOICES_LIST: 'invoices:list',
   INVOICES_GET: 'invoices:get',
   INVOICES_CREATE: 'invoices:create',
+  INVOICES_UPDATE: 'invoices:update',
   INVOICES_CANCEL: 'invoices:cancel',
   INVOICES_NEXT_NUMBER: 'invoices:next-number',
   QUOTATIONS_LIST: 'quotations:list',

@@ -157,18 +157,104 @@ export function createQuotation(input: {
   return getQuotation(id)
 }
 
-export function updateQuotation(id: string, patch: { status?: string; notes?: string }) {
+export function updateQuotation(
+  id: string,
+  patch: {
+    status?: string
+    notes?: string
+    customerId?: string
+    customerName?: string
+    quotationDate?: string
+    validUntil?: string | null
+    items?: InvoiceItemInput[]
+  },
+) {
   const user = requirePermission('quotations.manage')
-  const existing = queryOne('SELECT id FROM quotations WHERE id = ? AND company_id = ?', [id, user.companyId])
-  if (!existing) throw new AppError('Quotation not found.', 'NOT_FOUND')
-  run(`UPDATE quotations SET status = COALESCE(?, status), notes = COALESCE(?, notes), updated_at = ? WHERE id = ? AND company_id = ?`, [
-    patch.status ?? null,
-    patch.notes ?? null,
-    now(),
+  const existing = queryOne<Record<string, unknown>>('SELECT * FROM quotations WHERE id = ? AND company_id = ?', [
     id,
     user.companyId,
   ])
-  writeAudit(user.companyId, user, 'quotation.updated', 'quotations', id, 'Quotation updated')
+  if (!existing) throw new AppError('Quotation not found.', 'NOT_FOUND')
+  if (existing.status === 'converted') throw new AppError('Converted quotations cannot be edited.', 'VALIDATION')
+
+  if (!patch.items) {
+    run(
+      `UPDATE quotations SET status = COALESCE(?, status), notes = COALESCE(?, notes), updated_at = ? WHERE id = ? AND company_id = ?`,
+      [patch.status ?? null, patch.notes ?? null, now(), id, user.companyId],
+    )
+    writeAudit(user.companyId, user, 'quotation.updated', 'quotations', id, 'Quotation updated')
+    return getQuotation(id)
+  }
+
+  if (!patch.items.length) throw new AppError('Add at least one item.', 'VALIDATION')
+  const ts = now()
+  let customerName = patch.customerName || String(existing.customer_name || 'Customer')
+  if (patch.customerId) {
+    const c = queryOne<{ name: string }>('SELECT name FROM customers WHERE id = ? AND company_id = ?', [
+      patch.customerId,
+      user.companyId,
+    ])
+    if (!c) throw new AppError('Customer not found.', 'NOT_FOUND')
+    customerName = c.name
+  }
+
+  const calcs = patch.items.map((item) => {
+    const base = item.qty * item.rate
+    const after = Math.max(0, base - (item.discount || 0))
+    const tax = (after * (item.taxRate || 0)) / 100
+    return { ...item, amount: after + tax }
+  })
+  const subtotal = round2(calcs.reduce((s, i) => s + i.qty * i.rate, 0))
+  const discountAmount = round2(calcs.reduce((s, i) => s + (i.discount || 0), 0))
+  const taxAmount = round2(calcs.reduce((s, i) => s + (i.amount - Math.max(0, i.qty * i.rate - (i.discount || 0))), 0))
+  const grandTotal = round2(calcs.reduce((s, i) => s + i.amount, 0))
+
+  withTransaction(() => {
+    run(
+      `UPDATE quotations SET
+        customer_id = ?, customer_name = ?, quotation_date = ?, valid_until = ?, status = ?,
+        subtotal = ?, discount_amount = ?, tax_amount = ?, grand_total = ?, notes = ?, updated_at = ?
+       WHERE id = ? AND company_id = ?`,
+      [
+        patch.customerId ?? null,
+        customerName,
+        patch.quotationDate || String(existing.quotation_date),
+        patch.validUntil === undefined ? existing.valid_until ?? null : patch.validUntil,
+        patch.status || existing.status || 'draft',
+        subtotal,
+        discountAmount,
+        taxAmount,
+        grandTotal,
+        patch.notes ?? existing.notes ?? null,
+        ts,
+        id,
+        user.companyId,
+      ],
+    )
+    run('DELETE FROM quotation_items WHERE quotation_id = ? AND company_id = ?', [id, user.companyId])
+    calcs.forEach((item, idx) => {
+      run(
+        `INSERT INTO quotation_items (id, company_id, quotation_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, amount, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          generateId(),
+          user.companyId,
+          id,
+          item.productId ?? null,
+          item.productName,
+          item.hsn ?? null,
+          item.qty,
+          item.rate,
+          item.discount || 0,
+          item.taxRate || 0,
+          item.amount,
+          idx,
+        ],
+      )
+    })
+    writeAudit(user.companyId, user, 'quotation.updated', 'quotations', id, `Quotation ${existing.quotation_number} updated`)
+  })
+
   return getQuotation(id)
 }
 

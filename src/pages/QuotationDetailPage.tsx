@@ -84,6 +84,11 @@ export function QuotationDetailPage() {
             Print / PDF
           </Button>
           {quotation.status !== 'converted' ? (
+            <Button variant="outline" onClick={() => navigate(`/quotations/${id}/edit`)}>
+              Edit
+            </Button>
+          ) : null}
+          {quotation.status !== 'converted' ? (
             <Button onClick={() => void convert()}>Convert to Invoice</Button>
           ) : null}
         </div>

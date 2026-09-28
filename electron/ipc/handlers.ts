@@ -157,6 +157,10 @@ export function registerIpcHandlers(): void {
     [IpcChannels.INVOICES_LIST]: (payload) => invoices.listInvoices((payload as object) || {}),
     [IpcChannels.INVOICES_GET]: (payload) => invoices.getInvoice((payload as { id: string }).id),
     [IpcChannels.INVOICES_CREATE]: (payload) => invoices.createInvoice(payload as Parameters<typeof invoices.createInvoice>[0]),
+    [IpcChannels.INVOICES_UPDATE]: (payload) => {
+      const p = payload as { id: string } & Parameters<typeof invoices.updateInvoice>[1]
+      return invoices.updateInvoice(p.id, p)
+    },
     [IpcChannels.INVOICES_CANCEL]: (payload) => invoices.cancelInvoice((payload as { id: string }).id),
     [IpcChannels.INVOICES_NEXT_NUMBER]: () => invoices.nextInvoiceNumber(),
     [IpcChannels.QUOTATIONS_LIST]: (payload) => operations.listQuotations((payload as object) || {}),
@@ -164,7 +168,7 @@ export function registerIpcHandlers(): void {
     [IpcChannels.QUOTATIONS_CREATE]: (payload) =>
       operations.createQuotation(payload as Parameters<typeof operations.createQuotation>[0]),
     [IpcChannels.QUOTATIONS_UPDATE]: (payload) => {
-      const p = payload as { id: string; status?: string; notes?: string }
+      const p = payload as { id: string } & Parameters<typeof operations.updateQuotation>[1]
       return operations.updateQuotation(p.id, p)
     },
     [IpcChannels.QUOTATIONS_CONVERT]: (payload) => operations.convertQuotation((payload as { id: string }).id),

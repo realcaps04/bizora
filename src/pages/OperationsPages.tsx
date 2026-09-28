@@ -77,9 +77,14 @@ export function QuotationsPage() {
                   </td>
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                     {q.status !== 'converted' ? (
-                      <Button size="sm" variant="outline" onClick={() => void convert(String(q.id))}>
-                        Convert to Invoice
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => navigate(`/quotations/${String(q.id)}/edit`)}>
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => void convert(String(q.id))}>
+                          Convert to Invoice
+                        </Button>
+                      </div>
                     ) : (
                       '—'
                     )}

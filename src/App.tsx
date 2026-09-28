@@ -33,6 +33,16 @@ function EditProductRoute() {
   return <AddProductPage productId={id} />
 }
 
+function EditInvoiceRoute() {
+  const { id = '' } = useParams()
+  return <NewSalePage invoiceId={id} />
+}
+
+function EditQuotationRoute() {
+  const { id = '' } = useParams()
+  return <NewQuotationPage quotationId={id} />
+}
+
 function CustomerDetailRoute() {
   const { id = '' } = useParams()
   return <CustomerDetailPage id={id} />
@@ -98,8 +108,10 @@ export default function App() {
           <Route path="/sales/new" element={<NewSalePage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/invoices/:id/edit" element={<EditInvoiceRoute />} />
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="/quotations/new" element={<NewQuotationPage />} />
+          <Route path="/quotations/:id/edit" element={<EditQuotationRoute />} />
           <Route path="/quotations/:id" element={<QuotationDetailPage />} />
           <Route path="/quotations" element={<QuotationsPage />} />
           <Route path="/customers" element={<CustomersPage />} />
