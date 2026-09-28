@@ -86,7 +86,7 @@ export function NewPurchasePage() {
     const node = el ?? productAnchor.current
     if (!node) return
     const rect = node.getBoundingClientRect()
-    const width = Math.min(420, Math.max(rect.width, 280))
+    const width = Math.min(640, window.innerWidth - 16)
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8)
     const menuHeight = 224
     const spaceBelow = window.innerHeight - rect.bottom
