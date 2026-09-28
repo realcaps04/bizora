@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bizora shots</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #f3f4f6; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    .app { display: flex; width: 100vw; height: 100vh; background: #f3f4f6; color: #111827; font-size: 13.5px; line-height: 1.45; }
+    aside {
+      width: 220px; flex: none; background: #031C45; color: #94a3b8;
+      display: flex; flex-direction: column;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .brand img { width: 28px; height: 28px; }
+    .brand b { display: block; color: #fff; font-size: 13px; font-weight: 600; }
+    .brand small { display: block; color: #94a3b8; font-size: 11px; }
+    nav { flex: 1; padding: 10px 8px; overflow: hidden; }
+    nav a { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 6px; color: #94a3b8; font-size: 13.5px; font-weight: 500; }
+    nav a.on { background: #0a3a7a; color: #fff; }
+    nav svg { width: 15px; height: 15px; flex: none; }
+    .sep { height: 1px; background: rgba(255,255,255,.1); margin: 8px 8px; }
+    .foot { border-top: 1px solid rgba(255,255,255,.1); padding: 12px; }
+    .who { background: rgba(255,255,255,.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+    .who b { display: block; color: #fff; font-size: 13.5px; font-weight: 500; }
+    .who span { color: #94a3b8; font-size: 11.5px; text-transform: capitalize; }
+    .local { display: flex; align-items: center; gap: 6px; color: #6ee7b7; font-size: 11.5px; padding: 0 4px 8px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; }
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .titlebar { height: 40px; background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: flex-end; position: relative; }
+    .titlebar em { position: absolute; left: 0; right: 0; text-align: center; font-style: normal; font-size: 13px; font-weight: 600; color: #031C45; pointer-events: none; }
+    .win { display: flex; }
+    .win i { width: 44px; height: 40px; display: grid; place-items: center; color: #031C45; }
+    .stage { flex: 1; padding: 20px; overflow: hidden; background: #f3f4f6; }
+    .screen { display: none; height: 100%; }
+    .screen.on { display: block; }
+    .ph { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .ph h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.02em; }
+    .ph p { margin: 2px 0 0; color: #6b7280; font-size: 13px; }
+    .btn { background: #0878F9; color: #fff; border: 0; border-radius: 6px; font: 600 13px Inter; padding: 7px 12px; }
+    .btn-out { background: #fff; color: #111827; border: 1px solid #e5e7eb; border-radius: 6px; font: 600 12px Inter; padding: 5px 10px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; }
+    .kpi span { display: block; color: #6b7280; font-size: 12px; font-weight: 500; }
+    .kpi b { display: block; margin-top: 6px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .grid2 { display: grid; grid-template-columns: 1.4fr .8fr; gap: 16px; margin-top: 16px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+    .card h2 { margin: 0; padding: 12px 16px 0; font-size: 13px; font-weight: 600; }
+    .card .muted { color: #6b7280; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-weight: 500; color: #6b7280; background: #f8fafc; padding: 10px 16px; font-size: 12px; }
+    td { padding: 10px 16px; border-top: 1px solid #e5e7eb; font-variant-numeric: tabular-nums; }
+    td.r, th.r { text-align: right; }
+    .link { color: #0878F9; font-weight: 500; }
+    .badge { display: inline-flex; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
+    .ok { background: #ecfdf5; color: #047857; }
+    .warn { background: #fff7ed; color: #c2410c; }
+    .bad { background: #fef2f2; color: #b91c1c; }
+    .info { background: #EAF4FF; color: #0666d6; }
+    .actions a { display: block; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; font-size: 13px; font-weight: 500; margin: 0 12px 8px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+    .tab { border: 1px solid #e5e7eb; background: #fff; color: #6b7280; border-radius: 6px; font: 500 13px Inter; padding: 6px 12px; }
+    .tab.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+    .search { margin-left: auto; height: 34px; min-width: 220px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; color: #9ca3af; padding: 0 12px; display: flex; align-items: center; font-size: 13px; }
+    .field { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    .field span { color: #6b7280; }
+    input, select { height: 32px; border: 1px solid #D8E4F2; border-radius: 6px; padding: 0 10px; font: 13px Inter; color: #031C45; background: #fff; }
+    label.lab { display: block; }
+    label.lab span { display: block; color: #62789A; font-size: 12px; font-weight: 500; margin-bottom: 4px; }
+    .sale-h { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+    .ico { width: 40px; height: 40px; border-radius: 10px; background: #EAF4FF; color: #0878F9; display: grid; place-items: center; }
+    .cust { background: #fff; border: 1px solid #D8E4F2; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; display: grid; grid-template-columns: 1.2fr .8fr .8fr; gap: 12px; }
+    .totals { display: flex; gap: 18px; align-items: center; font-size: 13px; color: #62789A; margin-top: 12px; }
+    .grand { margin-left: auto; background: #EAF4FF; border-radius: 8px; padding: 8px 14px; color: #031C45; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand">
+        <img src="../public/Bizora_applogo.png" alt="" />
+        <div><b>Bizora</b><small>Business Management</small></div>
+      </div>
+      <nav>
+        <a data-screen="sale"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg>New Sales</a>
+        <a data-screen="dashboard" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+        <a data-screen="invoices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>Invoices</a>
+        <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h8M8 10h8M8 14h5"/><rect x="4" y="3" width="16" height="18" rx="2"/></svg>Quotations</a>
+        <a data-screen="customers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3"/></svg>Customers</a>
+        <a data-screen="products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>Products</a>
+        <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"/></svg>Purchases</a>
+        <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3"/></svg>Expenses</a>
+        <a data-screen="reports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3"/></svg>Reports</a>
+        <div class="sep"></div>
+        <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-3-3.87"/><circle cx="8" cy="8" r="3"/><path d="M2 21v-2a4 4 0 0 1 4-4h4"/></svg>Staff</a>
+        <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>Settings</a>
+      </nav>
+      <div class="foot">
+        <div class="who"><b>Anoop Kumar</b><span>Owner</span></div>
+        <div class="local"><span class="dot"></span> Local Mode</div>
+      </div>
+    </aside>
+    <section class="main">
+      <div class="titlebar">
+        <em>Harbour Provisions</em>
+        <div class="win"><i>—</i><i>□</i><i>×</i></div>
+      </div>
+      <div class="stage">
+        <div class="screen on" id="dashboard">
+          <div class="ph">
+            <div><h1>Good evening, Anoop</h1><p>Business overview</p></div>
+            <button class="btn">New Sale</button>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><span>Today's Sales</span><b>₹48,290.00</b></div>
+            <div class="kpi"><span>This Month</span><b>₹6,42,180.00</b></div>
+            <div class="kpi"><span>Outstanding</span><b>₹1,18,640.00</b></div>
+            <div class="kpi"><span>Total Customers</span><b>186</b></div>
+          </div>
+          <div class="grid2">
+            <div class="card" style="padding:0 0 12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px 8px">
+                <h2 style="padding:0">Sales Overview</h2>
+                <span class="muted">Last 30 days</span>
+              </div>
+              <svg viewBox="0 0 640 200" style="width:100%;height:210px;display:block;padding:0 8px">
+                <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2563eb" stop-opacity="0.25"/><stop offset="100%" stop-color="#2563eb" stop-opacity="0"/></linearGradient></defs>
+                <path d="M24 150 C80 142 120 128 170 132 S280 70 340 88 460 40 520 62 600 48 616 54 V188 H24 Z" fill="url(#g)"/>
+                <path d="M24 150 C80 142 120 128 170 132 S280 70 340 88 460 40 520 62 600 48 616 54" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+                <g fill="#9ca3af" font-size="11" font-family="Inter">
+                  <text x="24" y="198">01 Sep</text><text x="170" y="198">08</text><text x="320" y="198">15</text><text x="460" y="198">22</text><text x="580" y="198">27</text>
+                </g>
+              </svg>
+            </div>
+            <div class="card">
+              <h2>Quick Actions</h2>
+              <div class="actions" style="padding:10px 0 12px">
+                <a>New Sale</a>
+                <a>New Customer</a>
+                <a>Add Product</a>
+                <a>Create Quotation</a>
+                <a>View Reports</a>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:16px">
+            <div style="display:flex;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e5e7eb">
+              <h2 style="padding:0">Recent Invoices</h2>
+              <span class="link" style="font-size:12px;font-weight:600">View all</span>
+            </div>
+            <table>
+              <thead><tr><th>Invoice No.</th><th>Customer</th><th>Date</th><th class="r">Amount</th><th>Payment</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td class="link">INV-1042</td><td>Anjali Stores</td><td>27 Sep 2026</td><td class="r">₹18,450.00</td><td><span class="badge ok">paid</span></td><td><span class="badge info">confirmed</span></td></tr>
+                <tr><td class="link">INV-1041</td><td>Rahman Traders</td><td>27 Sep 2026</td><td class="r">₹42,800.00</td><td><span class="badge warn">partial</span></td><td><span class="badge info">confirmed</span></td></tr>
+                <tr><td class="link">INV-1040</td><td>Greenleaf Mart</td><td>26 Sep 2026</td><td class="r">₹9,640.00</td><td><span class="badge bad">unpaid</span></td><td><span class="badge info">confirmed</span></td></tr>
+                <tr><td class="link">INV-1039</td><td>Kottayam Stores</td><td>26 Sep 2026</td><td class="r">₹27,150.00</td><td><span class="badge ok">paid</span></td><td><span class="badge info">confirmed</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="screen" id="invoices">
+          <div class="ph"><div><h1>Invoices</h1><p>Invoice management</p></div></div>
+          <div class="tabs">
+            <button class="tab on">All</button>
+            <button class="tab">Paid</button>
+            <button class="tab">Unpaid</button>
+            <button class="tab">Partially Paid</button>
+            <button class="tab">Cancelled</button>
+            <div class="search">Search invoices…</div>
+          </div>
+          <div class="card">
+            <table>
+              <thead><tr><th>Invoice No.</th><th>Date</th><th>Customer</th><th class="r">Items</th><th>Payment</th><th class="r">Amount</th><th>Status</th><th>Created By</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td class="link">INV-1042</td><td>27 Sep 2026</td><td>Anjali Stores</td><td class="r">2</td><td>UPI</td><td class="r">₹18,450.00</td><td><span class="badge ok">paid</span></td><td>Anoop Kumar</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1041</td><td>27 Sep 2026</td><td>Rahman Traders</td><td class="r">5</td><td>Bank Transfer</td><td class="r">₹42,800.00</td><td><span class="badge warn">partial</span></td><td>Anoop Kumar</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1040</td><td>26 Sep 2026</td><td>Greenleaf Mart</td><td class="r">3</td><td>Credit</td><td class="r">₹9,640.00</td><td><span class="badge bad">unpaid</span></td><td>Meera Joseph</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1039</td><td>26 Sep 2026</td><td>Kottayam Stores</td><td class="r">4</td><td>Cash</td><td class="r">₹27,150.00</td><td><span class="badge ok">paid</span></td><td>Anoop Kumar</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1038</td><td>25 Sep 2026</td><td>Malabar Distributors</td><td class="r">8</td><td>UPI</td><td class="r">₹61,200.00</td><td><span class="badge ok">paid</span></td><td>Sajan P</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1037</td><td>24 Sep 2026</td><td>Thrissur Wholesale</td><td class="r">6</td><td>Bank Transfer</td><td class="r">₹33,780.00</td><td><span class="badge warn">partial</span></td><td>Anoop Kumar</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1036</td><td>23 Sep 2026</td><td>Anjali Stores</td><td class="r">2</td><td>Cash</td><td class="r">₹8,920.00</td><td><span class="badge ok">paid</span></td><td>Meera Joseph</td><td><button class="btn-out">Edit</button></td></tr>
+                <tr><td class="link">INV-1035</td><td>22 Sep 2026</td><td>Greenleaf Mart</td><td class="r">1</td><td>UPI</td><td class="r">₹4,180.00</td><td><span class="badge ok">paid</span></td><td>Sajan P</td><td><button class="btn-out">Edit</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="screen" id="sale">
+          <div class="sale-h">
+            <div style="display:flex;gap:12px;align-items:flex-start">
+              <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+              <div><h1 style="font-size:18px;font-weight:700;color:#031C45;margin:0">Sales Invoice</h1><p style="margin:2px 0 0;color:#62789A;font-size:13px">Create a new sales invoice.</p></div>
+            </div>
+            <div style="display:flex;gap:12px">
+              <label class="lab"><span>Invoice No.</span><input value="INV-1043" readonly style="width:180px;font-weight:500" /></label>
+              <label class="lab"><span>Date</span><input value="28 Sep 2026" style="width:160px" /></label>
+            </div>
+          </div>
+          <div class="cust">
+            <label class="lab"><span>Customer</span><input value="Anjali Stores" /></label>
+            <label class="lab"><span>Place of supply</span><input value="Kerala (32)" /></label>
+            <label class="lab"><span>GSTIN</span><input value="32AAAAA0000A1Z5" /></label>
+          </div>
+          <div class="card">
+            <table>
+              <thead><tr><th>#</th><th>Product / Description</th><th>HSN</th><th class="r">Qty</th><th class="r">Rate (₹)</th><th class="r">GST %</th><th class="r">Amount (₹)</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>Basmati Rice 25 kg</td><td>1006</td><td class="r">12</td><td class="r">1,450.00</td><td class="r">5%</td><td class="r">18,270.00</td></tr>
+                <tr><td>2</td><td>Sunflower Oil 5 L</td><td>1512</td><td class="r">6</td><td class="r">780.00</td><td class="r">5%</td><td class="r">4,914.00</td></tr>
+                <tr><td>3</td><td>Toor Dal 1 kg</td><td>0713</td><td class="r">40</td><td class="r">128.00</td><td class="r">5%</td><td class="r">5,376.00</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="totals">
+            <span>Sub Total <b style="color:#031C45">₹27,200.00</b></span>
+            <span>Taxable <b style="color:#031C45">₹27,200.00</b></span>
+            <span>CGST (2.5%) <b style="color:#031C45">₹680.00</b></span>
+            <span>SGST (2.5%) <b style="color:#031C45">₹680.00</b></span>
+            <div class="grand">Grand Total ₹28,560.00</div>
+          </div>
+        </div>
+
+        <div class="screen" id="products">
+          <div class="ph">
+            <div><h1>Products</h1><p>Stock, pricing and GST for every item</p></div>
+            <button class="btn">Add Product</button>
+          </div>
+          <div class="tabs">
+            <div class="search" style="margin:0">Search products</div>
+            <button class="tab">Filters</button>
+          </div>
+          <div class="card">
+            <table>
+              <thead><tr><th>Product</th><th>SKU</th><th>HSN</th><th class="r">Purchase</th><th class="r">Selling</th><th class="r">GST</th><th class="r">Stock</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Basmati Rice 25 kg</td><td>BR-25</td><td>1006</td><td class="r">₹1,180.00</td><td class="r">₹1,450.00</td><td class="r">5%</td><td class="r">86</td><td><span class="badge ok">In stock</span></td></tr>
+                <tr><td>Sunflower Oil 5 L</td><td>SO-5</td><td>1512</td><td class="r">₹620.00</td><td class="r">₹780.00</td><td class="r">5%</td><td class="r">14</td><td><span class="badge warn">Low</span></td></tr>
+                <tr><td>Toor Dal 1 kg</td><td>TD-1</td><td>0713</td><td class="r">₹92.00</td><td class="r">₹128.00</td><td class="r">5%</td><td class="r">240</td><td><span class="badge ok">In stock</span></td></tr>
+                <tr><td>Wheat Atta 10 kg</td><td>WA-10</td><td>1101</td><td class="r">₹310.00</td><td class="r">₹390.00</td><td class="r">5%</td><td class="r">64</td><td><span class="badge ok">In stock</span></td></tr>
+                <tr><td>Ashirvad Commercial Flexible Garden Hose</td><td>HO-30</td><td>3917</td><td class="r">₹221.25</td><td class="r">₹285.00</td><td class="r">18%</td><td class="r">48</td><td><span class="badge ok">In stock</span></td></tr>
+                <tr><td>Coconut Oil 1 L</td><td>CO-1</td><td>1513</td><td class="r">₹168.00</td><td class="r">₹210.00</td><td class="r">5%</td><td class="r">9</td><td><span class="badge warn">Low</span></td></tr>
+                <tr><td>Sugar 1 kg</td><td>SG-1</td><td>1701</td><td class="r">₹42.00</td><td class="r">₹48.00</td><td class="r">5%</td><td class="r">320</td><td><span class="badge ok">In stock</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="screen" id="customers">
+          <div class="ph">
+            <div><h1>Customers</h1><p>Directory, balances and GSTIN</p></div>
+            <button class="btn">Add Customer</button>
+          </div>
+          <div class="tabs"><div class="search" style="margin:0">Search customers</div></div>
+          <div class="card">
+            <table>
+              <thead><tr><th>Customer</th><th>Phone</th><th>GSTIN</th><th>Place</th><th class="r">Purchases</th><th class="r">Outstanding</th></tr></thead>
+              <tbody>
+                <tr><td>Anjali Stores</td><td>98470 11220</td><td>32AAAAA0000A1Z5</td><td>Kochi</td><td class="r">₹2,48,600.00</td><td class="r">₹34,400.00</td></tr>
+                <tr><td>Rahman Traders</td><td>98950 22118</td><td>32BBBBB1111B1Z2</td><td>Thrissur</td><td class="r">₹5,12,900.00</td><td class="r">₹72,900.00</td></tr>
+                <tr><td>Greenleaf Mart</td><td>97461 33012</td><td>—</td><td>Aluva</td><td class="r">₹96,400.00</td><td class="r">₹9,640.00</td></tr>
+                <tr><td>Kottayam Stores</td><td>94470 11880</td><td>32CCCCC2222C1Z8</td><td>Kottayam</td><td class="r">₹1,62,000.00</td><td class="r">₹0.00</td></tr>
+                <tr><td>Malabar Distributors</td><td>98460 44110</td><td>32DDDDD3333D1Z4</td><td>Kozhikode</td><td class="r">₹8,10,200.00</td><td class="r">₹1,18,000.00</td></tr>
+                <tr><td>Thrissur Wholesale</td><td>96331 22880</td><td>32EEEEE4444E1Z1</td><td>Thrissur</td><td class="r">₹3,44,800.00</td><td class="r">₹21,500.00</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="screen" id="reports">
+          <div class="ph">
+            <div><h1>Reports</h1><p>Sales, financial, inventory and tax summaries</p></div>
+            <button class="btn-out">Print / Export PDF</button>
+          </div>
+          <div class="tabs">
+            <button class="tab on">Sales</button>
+            <button class="tab">Financial</button>
+            <button class="tab">Inventory</button>
+            <button class="tab">Tax</button>
+            <label class="lab" style="margin-left:8px"><span>From</span><input type="text" value="01 Sep 2026" style="width:140px" /></label>
+            <label class="lab"><span>To</span><input type="text" value="28 Sep 2026" style="width:140px" /></label>
+            <button class="btn">Apply</button>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><span>Sales</span><b>₹6,42,180.00</b></div>
+            <div class="kpi"><span>Invoices</span><b>148</b></div>
+            <div class="kpi"><span>Collections</span><b>₹5,23,540.00</b></div>
+            <div class="kpi"><span>Outstanding</span><b>₹1,18,640.00</b></div>
+          </div>
+          <div class="card" style="margin-top:16px;padding-bottom:8px">
+            <h2>Sales this month</h2>
+            <svg viewBox="0 0 1100 220" style="width:100%;height:240px;display:block;padding:0 16px">
+              <defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2563eb" stop-opacity="0.28"/><stop offset="100%" stop-color="#2563eb" stop-opacity="0"/></linearGradient></defs>
+              <path d="M20 160 C90 150 150 120 220 128 S360 70 450 90 640 40 760 70 960 50 1080 58 V208 H20 Z" fill="url(#g2)"/>
+              <path d="M20 160 C90 150 150 120 220 128 S360 70 450 90 640 40 760 70 960 50 1080 58" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+    window.showScreen = function (name) {
+      document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === name));
+      document.querySelectorAll('nav a[data-screen]').forEach((a) => a.classList.toggle('on', a.dataset.screen === name));
+    };
+  </script>
+</body>
+</html>
