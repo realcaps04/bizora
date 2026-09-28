@@ -22,14 +22,25 @@ export function getCompany(): Record<string, unknown> | null {
 
 export function updateCompany(patch: Record<string, unknown>): void {
   const user = requirePermission('company.manage')
-  const allowed = ['name', 'owner_name', 'email', 'mobile', 'address', 'gstin', 'business_type', 'currency', 'tax_mode', 'invoice_prefix', 'quotation_prefix', 'default_payment_methods'] as const
+  const allowed = ['name', 'owner_name', 'email', 'mobile', 'address', 'gstin', 'logo_path', 'business_type', 'currency', 'tax_mode', 'invoice_prefix', 'quotation_prefix', 'default_payment_methods'] as const
   const sets: string[] = []
   const vals: unknown[] = []
   for (const key of allowed) {
-    if (key in patch) {
-      sets.push(`${key} = ?`)
-      vals.push(patch[key])
+    if (!(key in patch)) continue
+    if (key === 'logo_path') {
+      const value = patch[key] == null ? '' : String(patch[key])
+      if (value && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) {
+        throw new AppError('Choose a PNG, JPEG, or WebP logo.', 'VALIDATION')
+      }
+      if (value.length > 1_500_000) {
+        throw new AppError('That logo is too large. Choose a smaller image.', 'VALIDATION')
+      }
+      sets.push('logo_path = ?')
+      vals.push(value || null)
+      continue
     }
+    sets.push(`${key} = ?`)
+    vals.push(patch[key])
   }
   if (!sets.length) return
   sets.push('updated_at = ?')

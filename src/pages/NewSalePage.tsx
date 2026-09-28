@@ -9,7 +9,6 @@ import {
   Search,
   Settings,
   Trash2,
-  UserRound,
 } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
@@ -78,7 +77,6 @@ export function NewSalePage() {
   const [customerId, setCustomerId] = useState('')
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerOpen, setCustomerOpen] = useState(false)
-  const [customerCollapsed, setCustomerCollapsed] = useState(false)
   const customerInputRef = useRef<HTMLInputElement>(null)
   const [houseName, setHouseName] = useState('')
   const [place, setPlace] = useState('')
@@ -205,7 +203,6 @@ export function NewSalePage() {
     setPlace(parsed.place)
     setGstin(c.gstin || '')
     setCustomerOpen(false)
-    setCustomerCollapsed(true)
   }
 
   function clearCustomer() {
@@ -421,20 +418,6 @@ export function NewSalePage() {
         </div>
 
         {/* Customer */}
-        {customerCollapsed && customerQuery.trim() ? (
-          <button
-            type="button"
-            title={customerQuery}
-            onClick={() => {
-              setCustomerCollapsed(false)
-              setTimeout(() => customerInputRef.current?.focus(), 0)
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-[#D8E4F2] bg-white text-[#0878F9] shadow-[0_2px_10px_rgba(6,41,92,0.03)] hover:bg-[#F5F9FF]"
-          >
-            <UserRound size={18} />
-          </button>
-        ) : null}
-        {customerCollapsed && customerQuery.trim() ? null : (
         <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <div className="space-y-3">
@@ -458,7 +441,6 @@ export function NewSalePage() {
                       onBlur={() =>
                         setTimeout(() => {
                           setCustomerOpen(false)
-                          if (customerQuery.trim()) setCustomerCollapsed(true)
                         }, 150)
                       }
                       placeholder="Search customer by name, phone or code."
@@ -517,7 +499,6 @@ export function NewSalePage() {
             </div>
           </div>
         </section>
-        )}
 
         {/* Items */}
         <section className="rounded-[12px] border border-[#D8E4F2] bg-white shadow-[0_2px_10px_rgba(6,41,92,0.03)]">

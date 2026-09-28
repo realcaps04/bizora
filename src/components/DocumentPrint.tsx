@@ -178,11 +178,11 @@ export function DocumentPrint({
       {/* Company + meta */}
       <div className="grid grid-cols-2 border-b border-[#C9D4E2]">
         <div className="flex gap-3 border-r border-[#C9D4E2] px-4 py-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-[#0B3A7A] text-[18px] font-bold text-white">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-[#E3EAF3] bg-white text-[18px] font-bold text-white">
             {logoPath ? (
-              <img src={logoPath} alt="" className="h-full w-full object-cover" />
+              <img src={logoPath} alt="" className="h-full w-full object-contain" />
             ) : (
-              companyInitial(companyName)
+              <span className="flex h-full w-full items-center justify-center bg-[#0B3A7A]">{companyInitial(companyName)}</span>
             )}
           </div>
           <div className="min-w-0">

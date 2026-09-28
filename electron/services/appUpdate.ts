@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import https from 'node:https'
@@ -72,18 +72,17 @@ function request(url: string, headers: Record<string, string>, redirects = 0): P
 }
 
 async function readBody(url: string): Promise<string> {
-  const res = await request(url, {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': 'Bizora',
+  const res = await net.fetch(url, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Bizora',
+    },
+    signal: AbortSignal.timeout(20_000),
   })
-  const chunks: Buffer[] = []
-  await new Promise<void>((resolve, reject) => {
-    res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
-    res.on('end', () => resolve())
-    res.on('error', reject)
-  })
-  if (res.statusCode !== 200) return ''
-  return Buffer.concat(chunks).toString('utf8')
+  if (!res.ok) {
+    throw new AppError('GitHub did not answer the update check.', 'INTERNAL')
+  }
+  return res.text()
 }
 
 export type UpdateCheck = {

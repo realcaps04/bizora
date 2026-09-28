@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
 import { BrandLogo } from '@/components/BrandLogo'
@@ -360,6 +360,88 @@ function invoiceFieldErrors(
   return errors
 }
 
+function readLogoFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const max = 512
+      const scale = Math.min(1, max / Math.max(img.width, img.height))
+      const width = Math.max(1, Math.round(img.width * scale))
+      const height = Math.max(1, Math.round(img.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        reject(new Error('Could not read that image.'))
+        return
+      }
+      ctx.drawImage(img, 0, 0, width, height)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/png'))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Choose a PNG, JPEG, or WebP image.'))
+    }
+    img.src = url
+  })
+}
+
+function CompanyLogoField({ value, onChange }: { value: string; onChange: (logo: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState('')
+
+  async function choose(file: File | undefined) {
+    if (!file) return
+    setError('')
+    try {
+      onChange(await readLogoFile(file))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read that image.')
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-1.5 text-[13px] font-medium text-ink">Company logo</div>
+      <div className="flex items-center gap-3">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white">
+          {value ? (
+            <img src={value} alt="Company logo" className="h-full w-full object-contain" />
+          ) : (
+            <span className="px-1 text-center text-[11px] text-ink-muted">No logo</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
+            {value ? 'Change logo' : 'Add logo'}
+          </Button>
+          {value ? (
+            <Button type="button" variant="ghost" onClick={() => onChange('')}>
+              Remove
+            </Button>
+          ) : null}
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            void choose(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs text-ink-muted">Shown on invoices and quotations. Save Company to keep it.</p>
+      {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { showToast, user, refreshCompany } = useAppStore()
   const [tab, setTab] = useState('company')
@@ -488,6 +570,10 @@ export function SettingsPage() {
 
       {tab === 'company' ? (
         <Card className="max-w-2xl space-y-3 p-5">
+          <CompanyLogoField
+            value={company.logo_path ? String(company.logo_path) : ''}
+            onChange={(logo) => setCompany({ ...company, logo_path: logo })}
+          />
           <Field label="Company Name">
             <Input value={String(company.name || '')} onChange={(e) => setCompany({ ...company, name: e.target.value })} />
           </Field>
@@ -1014,6 +1100,7 @@ function UpdatesPanel() {
   const [checking, setChecking] = useState(false)
   const [percent, setPercent] = useState(0)
   const [error, setError] = useState('')
+  const [note, setNote] = useState('')
 
   useEffect(() => {
     if (!busy || !window.bizora?.onUpdateProgress) return
@@ -1021,13 +1108,33 @@ function UpdatesPanel() {
   }, [busy])
 
   async function checkNow() {
-    if (!window.bizora?.checkForUpdate) return
+    if (!window.bizora?.checkForUpdate) {
+      setError('Update check is only available in the Bizora app.')
+      return
+    }
     setChecking(true)
     setError('')
+    setNote('Checking for a newer version…')
     try {
       const update = await callApi(() => window.bizora.checkForUpdate())
-      if (update) setAppUpdate(update)
+      if (!update) {
+        setNote('')
+        setError('Bizora could not check for updates.')
+        return
+      }
+      setAppUpdate(update)
+      if (!update.reachable) {
+        setNote('')
+        setError('Could not reach GitHub. Check the internet connection and try again.')
+        return
+      }
+      setNote(
+        update.available
+          ? `Version ${update.latest} is ready to install.`
+          : `Checked just now. Bizora ${update.current} is the latest version.`,
+      )
     } catch (err) {
+      setNote('')
       setError(err instanceof Error ? err.message : 'Could not check for updates.')
     } finally {
       setChecking(false)
@@ -1072,6 +1179,7 @@ function UpdatesPanel() {
           Downloading the latest version{percent > 0 ? `… ${percent}%` : '…'}
         </p>
       ) : null}
+      {note ? <p className="text-sm text-ink-muted">{note}</p> : null}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex gap-2">
         {available ? (
