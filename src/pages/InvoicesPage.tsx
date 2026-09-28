@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Ban, X } from 'lucide-react'
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
 import { DocumentPrint } from '@/components/DocumentPrint'
 import { useAppStore } from '@/stores/app'
@@ -152,6 +153,8 @@ export function InvoiceDetailPage() {
     customer?: Record<string, unknown> | null
   } | null>(null)
   const [settings, setSettings] = useState<Record<string, string>>({})
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -165,15 +168,27 @@ export function InvoiceDetailPage() {
     })()
   }, [id, params])
 
+  useEffect(() => {
+    if (!cancelOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !cancelling) setCancelOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cancelOpen, cancelling])
+
   async function cancel() {
-    if (!confirm('Cancel Invoice?\n\nThe invoice will remain in audit history and stock will be restored.')) return
+    setCancelling(true)
     try {
       await callApi(() => window.bizora.cancelInvoice(id))
       showToast('Invoice cancelled', 'success')
       const d = await callApi(() => window.bizora.getInvoice(id))
       setData(d as never)
+      setCancelOpen(false)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Unable to cancel invoice', 'error')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -199,7 +214,7 @@ export function InvoiceDetailPage() {
             Print / PDF
           </Button>
           {invoice.status !== 'cancelled' ? (
-            <Button variant="danger" onClick={() => void cancel()}>
+            <Button variant="danger" onClick={() => setCancelOpen(true)}>
               Cancel Invoice
             </Button>
           ) : null}
@@ -249,6 +264,53 @@ export function InvoiceDetailPage() {
           upiId: settings.upi_id,
         }}
       />
+
+      {cancelOpen ? (
+        <div
+          className="no-print fixed inset-0 z-[70] flex items-center justify-center bg-[#031C45]/35 p-4"
+          onMouseDown={() => {
+            if (!cancelling) setCancelOpen(false)
+          }}
+        >
+          <div
+            role="dialog"
+            aria-labelledby="cancel-invoice-title"
+            className="w-full max-w-[380px] overflow-hidden rounded-[14px] border border-[#D8E4F2] bg-white shadow-[0_18px_50px_rgba(3,28,69,0.18)]"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 px-5 pb-1 pt-5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#FEF2F2] text-[#DC2626]">
+                <Ban size={18} />
+              </div>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <h2 id="cancel-invoice-title" className="text-[15px] font-semibold tracking-tight text-[#031C45]">
+                  Cancel invoice?
+                </h2>
+                <p className="mt-1 text-[13px] leading-relaxed text-[#62789A]">
+                  The invoice will remain in audit history and stock will be restored.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                disabled={cancelling}
+                onClick={() => setCancelOpen(false)}
+                className="rounded-md p-1 text-[#94A3B8] hover:bg-[#F5F7FA] hover:text-[#031C45] disabled:opacity-50"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4">
+              <Button variant="outline" disabled={cancelling} onClick={() => setCancelOpen(false)}>
+                Keep invoice
+              </Button>
+              <Button variant="danger" disabled={cancelling} onClick={() => void cancel()}>
+                {cancelling ? 'Cancelling…' : 'Cancel invoice'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
