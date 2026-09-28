@@ -84,10 +84,12 @@ nsis:
 # Microsoft Store / Intune sideload format (optional)
 appx:
   applicationId: Bizora
-  identityName: Bizora.Billing
-  publisher: CN=Bizora
-  publisherDisplayName: Bizora
-  displayName: Bizora
+  identityName: EdisonBiju.Bizora.billing
+  publisher: CN=AE822019-C1CE-418B-8CF9-9C72E2340D20
+  # Must match the Partner Center publisher display name exactly
+  publisherDisplayName: Edison Biju
+  # Must be a name reserved on this Store product. "Bizora" is not reserved.
+  displayName: Bizora.billing
   languages:
     - en-US
   showNameOnTiles: true

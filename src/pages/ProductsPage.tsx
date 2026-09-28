@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Pencil, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { Pencil, Search, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { Badge, Button, EmptyState, Input, Modal, PageHeader, Select, Spinner } from '@/components/ui'
 import { COMPANY_CATEGORIES } from '@/data/companyCategories'
 import { useAppStore } from '@/stores/app'
@@ -32,6 +32,7 @@ export function ProductsPage() {
     purchaseMax: '',
   }
   const [filters, setFilters] = useState(emptyFilters)
+  const [searchText, setSearchText] = useState('')
   const [options, setOptions] = useState({
     categories: [] as string[],
     companyCategories: [] as string[],
@@ -100,6 +101,13 @@ export function ProductsPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setFilters((current) => (current.search === searchText ? current : { ...current, search: searchText }))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [searchText])
 
   useEffect(() => {
     setPage(1)
@@ -214,7 +222,14 @@ export function ProductsPage() {
         onClose={() => setFiltersOpen(false)}
         footer={
           <>
-            <Button variant="outline" onClick={() => setFilters(emptyFilters)} disabled={!filtering}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchText('')
+                setFilters(emptyFilters)
+              }}
+              disabled={!filtering && !searchText}
+            >
               Clear all
             </Button>
             <Button onClick={() => setFiltersOpen(false)}>Done</Button>
@@ -225,8 +240,8 @@ export function ProductsPage() {
           <FilterField label="Search">
             <Input
               placeholder="Name, code, barcode, HSN…"
-              value={filters.search}
-              onChange={(e) => setFilter('search', e.target.value)}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
             />
           </FilterField>
           <FilterField label="Company type">
@@ -319,6 +334,16 @@ export function ProductsPage() {
           </FilterField>
         </div>
       </Modal>
+      <div className="relative mb-3">
+        <Search size={15} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-muted" />
+        <Input
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Search products by name, code, barcode, or HSN"
+          aria-label="Search products"
+          className="h-9 pl-8"
+        />
+      </div>
       {selected.size > 0 ? (
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-[#D8E4F2] bg-[#F7FAFD] px-3 py-2 text-sm">
           <span className="font-medium text-[#031C45]">{selected.size.toLocaleString()} selected</span>

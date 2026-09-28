@@ -123,7 +123,10 @@ export function BulkProductsPage() {
   const [selected, setSelected] = useState<StarterCatalog | null>(null)
   const [preview, setPreview] = useState<Array<{ name: string; sku: string; category: string; purchaseRate: number; sellingRate: number; taxRate: number }>>([])
   const [previewTotal, setPreviewTotal] = useState(0)
-  const [previewPage, setPreviewPage] = useState(1)
+  const [previewCursor, setPreviewCursor] = useState('')
+  const [cursorHistory, setCursorHistory] = useState<string[]>([])
+  const [previewDone, setPreviewDone] = useState(true)
+  const [nextCursor, setNextCursor] = useState('')
   const [previewSearch, setPreviewSearch] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [importingId, setImportingId] = useState<string | null>(null)
@@ -148,15 +151,22 @@ export function BulkProductsPage() {
   useEffect(() => {
     if (!selected) return
     setPreviewLoading(true)
-    void callApi(() => window.bizora.previewStarterCatalog(selected.id, { search: previewSearch, page: previewPage, pageSize: 40 }))
-      .then((data) => {
-        const result = data as { products?: typeof preview; total?: number }
-        setPreview(result.products || [])
-        setPreviewTotal(result.total ?? 0)
-      })
-      .catch((err) => showToast(err instanceof Error ? err.message : 'Unable to load products', 'error'))
-      .finally(() => setPreviewLoading(false))
-  }, [selected, previewPage, previewSearch])
+    const handle = window.setTimeout(() => {
+      void callApi(() =>
+        window.bizora.previewStarterCatalog(selected.id, { search: previewSearch, cursor: previewCursor, pageSize: 40 }),
+      )
+        .then((data) => {
+          const result = data as { products?: typeof preview; total?: number; cursor?: string; isDone?: boolean }
+          setPreview(result.products || [])
+          setPreviewTotal(result.total ?? 0)
+          setPreviewDone(Boolean(result.isDone) || !result.cursor)
+          setNextCursor(result.cursor || '')
+        })
+        .catch((err) => showToast(err instanceof Error ? err.message : 'Unable to load products', 'error'))
+        .finally(() => setPreviewLoading(false))
+    }, previewSearch.trim() ? 300 : 0)
+    return () => window.clearTimeout(handle)
+  }, [selected, previewCursor, previewSearch])
 
   const visibleCatalogs = catalogs
     .filter((catalog) => {
@@ -258,9 +268,9 @@ export function BulkProductsPage() {
             <h1 className="text-[22px] font-bold tracking-tight text-[#031C45]">Bulk add products</h1>
             <p className="mt-0.5 max-w-xl text-[13px] text-[#62789A]">
               {selected
-                ? `${selected.name} products you can add to this company. Stock starts at zero, and you can change prices later.`
+                ? `${selected.name} products from the shared catalog. Adding them saves a copy in this company. Products already here are skipped.`
                 : view === 'catalogs'
-                  ? 'Choose a company type to see its products, then add them to the company you are signed in to.'
+                  ? 'Company types and products are loaded from the shared catalog. Choose one to add those products to this company.'
                   : 'Products are saved for the company you are signed in to. Add them in the table, or import a CSV. Use GST or Non-GST on each row.'}
             </p>
           </div>
@@ -314,7 +324,8 @@ export function BulkProductsPage() {
               value={previewSearch}
               onChange={(event) => {
                 setPreviewSearch(event.target.value)
-                setPreviewPage(1)
+                setPreviewCursor('')
+                setCursorHistory([])
               }}
             />
             <div className="overflow-auto rounded-[14px] border border-[#D8E4F2] bg-white">
@@ -357,24 +368,33 @@ export function BulkProductsPage() {
                 </tbody>
               </table>
             </div>
-            {previewTotal > 40 ? (
+            {previewTotal > 40 || cursorHistory.length > 0 || !previewDone ? (
               <div className="flex items-center justify-between text-[13px] text-[#62789A]">
                 <span>
-                  Showing {(previewPage - 1) * 40 + 1}–{Math.min(previewPage * 40, previewTotal)} of {previewTotal.toLocaleString()}
+                  {previewSearch.trim()
+                    ? `${preview.length.toLocaleString()} matching products`
+                    : `${previewTotal.toLocaleString()} products in the catalog`}
                 </span>
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    disabled={previewPage <= 1}
-                    onClick={() => setPreviewPage((page) => page - 1)}
+                    disabled={cursorHistory.length === 0 || previewLoading}
+                    onClick={() => {
+                      const previous = cursorHistory[cursorHistory.length - 1] || ''
+                      setCursorHistory((history) => history.slice(0, -1))
+                      setPreviewCursor(previous)
+                    }}
                     className="inline-flex h-8 items-center rounded-[8px] border border-[#D8E4F2] bg-white px-3 disabled:opacity-50"
                   >
                     Previous
                   </button>
                   <button
                     type="button"
-                    disabled={previewPage * 40 >= previewTotal}
-                    onClick={() => setPreviewPage((page) => page + 1)}
+                    disabled={previewDone || previewLoading || !nextCursor}
+                    onClick={() => {
+                      setCursorHistory((history) => [...history, previewCursor])
+                      setPreviewCursor(nextCursor)
+                    }}
                     className="inline-flex h-8 items-center rounded-[8px] border border-[#D8E4F2] bg-white px-3 disabled:opacity-50"
                   >
                     Next
@@ -416,7 +436,8 @@ export function BulkProductsPage() {
                     type="button"
                     disabled={!catalog.ready}
                     onClick={() => {
-                      setPreviewPage(1)
+                      setPreviewCursor('')
+                      setCursorHistory([])
                       setPreviewSearch('')
                       setSelected(catalog)
                     }}

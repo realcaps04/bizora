@@ -132,7 +132,7 @@ export function registerIpcHandlers(): void {
       catalog.importProductCatalog((payload as { companyCategory: string }).companyCategory),
     [IpcChannels.PRODUCTS_STARTER_CATALOGS]: () => starterCatalogs.listStarterCatalogs(),
     [IpcChannels.PRODUCTS_PREVIEW_STARTER]: (payload) =>
-      starterCatalogs.previewStarterCatalog((payload as { catalogId: string; search?: string; page?: number; pageSize?: number }) || { catalogId: '' }),
+      starterCatalogs.previewStarterCatalog((payload as { catalogId: string; search?: string; cursor?: string; pageSize?: number }) || { catalogId: '' }),
     [IpcChannels.PRODUCTS_IMPORT_STARTER]: (payload) =>
       starterCatalogs.importStarterCatalog((payload as { catalogId: string }).catalogId),
     [IpcChannels.PRODUCTS_IMPORT_CSV]: (payload) => {

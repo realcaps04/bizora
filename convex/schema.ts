@@ -2,8 +2,8 @@ import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 /**
- * Account directory, plus the product catalog.
- * Invoices, customers, purchases, and other company documents stay on the device.
+ * Account directory, company products, and the shared catalog.
+ * The catalog tables are downloaded into each install. Company documents stay on the device.
  */
 export default defineSchema({
   companies: defineTable({
@@ -74,4 +74,34 @@ export default defineSchema({
     .index('by_company', ['companyLocalId'])
     .index('by_company_tax', ['companyLocalId', 'taxType'])
     .index('by_companyCategory', ['companyCategory']),
+
+  /** Business types shown when a company imports a starter catalog. */
+  catalogCategories: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.string(),
+    productCount: v.number(),
+  }).index('by_key', ['key']),
+
+  /**
+   * Shared products for those categories.
+   * Written from the product files, then downloaded into the local app.
+   * This is not a company's own stock.
+   */
+  catalogItems: defineTable({
+    itemKey: v.string(),
+    catalogKey: v.string(),
+    name: v.string(),
+    sku: v.string(),
+    barcode: v.optional(v.string()),
+    category: v.optional(v.string()),
+    hsn: v.optional(v.string()),
+    taxType: v.union(v.literal('gst'), v.literal('non_gst')),
+    gstRate: v.number(),
+    purchaseRate: v.number(),
+    sellingRate: v.number(),
+    openingStock: v.number(),
+  })
+    .index('by_itemKey', ['itemKey'])
+    .index('by_catalog', ['catalogKey']),
 })

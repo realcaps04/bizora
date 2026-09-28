@@ -163,6 +163,28 @@ export function exportRawDatabase(): Buffer {
   return Buffer.from(getDb().export())
 }
 
+/** Open a backup file in memory, without changing the database on this computer. */
+export function withImportedDatabase<T>(raw: Buffer, fn: (source: Database) => T): T {
+  if (!SQL) throw new Error('Database not ready')
+  const source = new SQL.Database(new Uint8Array(raw))
+  try {
+    source.run(SCHEMA_SQL)
+    const info = source.prepare('PRAGMA table_info(products)')
+    const have = new Set<string>()
+    while (info.step()) {
+      const row = info.getAsObject() as { name?: string }
+      if (row.name) have.add(row.name)
+    }
+    info.free()
+    for (const [name, ddl] of PRODUCT_EXTRA_COLUMNS) {
+      if (!have.has(name)) source.run(`ALTER TABLE products ADD COLUMN ${name} ${ddl}`)
+    }
+    return fn(source)
+  } finally {
+    source.close()
+  }
+}
+
 export function replaceDatabaseFromBuffer(raw: Buffer): void {
   if (!SQL || !dbKey) throw new Error('Database not ready')
   persistNow()

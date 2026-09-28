@@ -4,7 +4,7 @@ import { COMPANY_CATEGORIES } from '../../src/data/companyCategories'
 import { getDb, queryAll, withTransaction } from '../database'
 import { generateId } from '../security/crypto'
 import { AppError, requirePermission } from '../security/session'
-import { listSharedCatalog } from './accountCloud'
+import { listCatalogCategories, listCatalogItems, listCatalogPage } from './accountCloud'
 import { writeAudit } from './auth'
 
 export interface StarterCatalog {
@@ -129,49 +129,70 @@ function readCatalogRows(fileName: string): CatalogRow[] {
   return parseProductCsv(readFileSync(file, 'utf8'))
 }
 
-const rowCache = new Map<string, CatalogRow[]>()
-
-export async function previewStarterCatalog(opts: { catalogId: string; search?: string; page?: number; pageSize?: number }) {
+export async function previewStarterCatalog(opts: { catalogId: string; search?: string; cursor?: string; pageSize?: number }) {
   requirePermission('products.manage')
   const catalog = STARTER_CATALOGS.find((item) => item.id === opts.catalogId)
-  if (!catalog) throw new AppError('Choose a company category.', 'VALIDATION')
-  let rows = rowCache.get(catalog.id)
-  if (!rows) {
-    rows = await catalogRows(catalog)
-    rowCache.set(catalog.id, rows)
-  }
-  const query = (opts.search || '').trim().toLowerCase()
-  const matched = query
-    ? rows.filter((row) => `${row.name} ${row.sku} ${row.category}`.toLowerCase().includes(query))
-    : rows
+  const remote = await listCatalogCategories()
+  const category = remote.find((item) => item.key === opts.catalogId)
+  if (!catalog && !category) throw new AppError('Choose a company category.', 'VALIDATION')
   const pageSize = Math.min(100, Math.max(10, opts.pageSize ?? 40))
-  const page = Math.max(1, opts.page ?? 1)
-  const start = (page - 1) * pageSize
+  const search = (opts.search || '').trim().toLowerCase()
+  const toProduct = (row: { name: string; sku: string; category: string; purchaseRate: number; sellingRate: number; taxType: string; gstRate: number }) => ({
+    name: row.name,
+    sku: row.sku,
+    category: row.category,
+    purchaseRate: row.purchaseRate,
+    sellingRate: row.sellingRate,
+    taxRate: row.taxType === 'non_gst' ? 0 : row.gstRate || 0,
+  })
+  if (search) {
+    const matches = []
+    let cursor = ''
+    let isDone = false
+    while (matches.length < pageSize && !isDone) {
+      const page = await listCatalogPage(opts.catalogId, { cursor, limit: 200 })
+      for (const row of page.items) {
+        if (`${row.name} ${row.sku} ${row.category}`.toLowerCase().includes(search)) matches.push(row)
+        if (matches.length >= pageSize) break
+      }
+      cursor = page.cursor
+      isDone = page.isDone || !page.cursor
+    }
+    return {
+      id: opts.catalogId,
+      name: category?.name || catalog?.name || '',
+      total: matches.length,
+      cursor: '',
+      isDone: true,
+      products: matches.map(toProduct),
+    }
+  }
+  const page = await listCatalogPage(opts.catalogId, { cursor: opts.cursor, limit: pageSize })
   return {
-    id: catalog.id,
-    name: catalog.name,
-    total: matched.length,
-    page,
-    pageSize,
-    products: matched.slice(start, start + pageSize).map((row) => ({
-      name: row.name,
-      sku: row.sku,
-      category: row.category,
-      purchaseRate: row.purchaseRate,
-      sellingRate: row.sellingRate,
-      taxRate: row.taxRate,
-    })),
+    id: opts.catalogId,
+    name: category?.name || catalog?.name || '',
+    total: category?.productCount || page.items.length,
+    cursor: page.cursor,
+    isDone: page.isDone,
+    products: page.items.map(toProduct),
   }
 }
 
 export async function listStarterCatalogs() {
   requirePermission('products.manage')
-  let sharedNames = new Set<string>()
   try {
-    const shared = await listSharedCatalog()
-    sharedNames = new Set(shared.categories.map((name) => name.trim().toLowerCase()).filter(Boolean))
+    const categories = await listCatalogCategories()
+    if (categories.length) {
+      return categories.map((category) => ({
+        id: category.key,
+        name: category.name,
+        description: category.description,
+        ready: category.productCount > 0,
+        productCount: category.productCount,
+      }))
+    }
   } catch {
-    sharedNames = new Set()
+    /* Bundled files still show a count when Convex is offline. */
   }
   return STARTER_CATALOGS.map((catalog) => {
     const fileReady = Boolean(catalog.file && catalogFile(catalog.file))
@@ -184,45 +205,36 @@ export async function listStarterCatalogs() {
         countCache.set(catalog.file, productCount)
       }
     }
-    const sharedReady = sharedNames.has(catalog.name.toLowerCase())
     return {
       id: catalog.id,
       name: catalog.name,
       description: catalog.description,
-      ready: fileReady || sharedReady,
-      productCount: fileReady ? productCount : sharedReady ? null : 0,
+      ready: productCount > 0,
+      productCount,
     }
   })
 }
 
 async function catalogRows(catalog: StarterCatalog): Promise<CatalogRow[]> {
-  const rows = catalog.file && catalogFile(catalog.file) ? readCatalogRows(catalog.file) : []
-  const seen = new Set(rows.map((row) => `${row.name.toLowerCase()}|${row.sku.toLowerCase()}`))
   try {
-    const shared = await listSharedCatalog(catalog.name)
-    for (const product of shared.products) {
-      const name = product.name.trim()
-      if (!name) continue
-      const sku = (product.sku || '').trim()
-      const key = `${name.toLowerCase()}|${sku.toLowerCase()}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      rows.push({
-        name,
-        sku,
+    const remote = await listCatalogItems(catalog.id)
+    if (remote.length) {
+      return remote.map((product) => ({
+        name: product.name.trim(),
+        sku: (product.sku || '').trim(),
         barcode: product.barcode || '',
         category: product.category || '',
         hsn: product.hsn || '',
         taxRate: product.taxType === 'non_gst' ? 0 : product.gstRate || 0,
         purchaseRate: product.purchaseRate || 0,
         sellingRate: product.sellingRate || 0,
-        openingStock: 0,
-      })
+        openingStock: product.openingStock || 0,
+      }))
     }
   } catch {
     /* The bundled file can still be imported when the shared catalog is offline. */
   }
-  return rows
+  return catalog.file && catalogFile(catalog.file) ? readCatalogRows(catalog.file) : []
 }
 
 export async function importStarterCatalog(catalogId: string) {
@@ -251,13 +263,19 @@ export async function importStarterCatalog(catalogId: string) {
       purchase_rate, selling_rate, tax_rate, opening_stock, current_stock, min_stock,
       brand, mrp, reorder_level, location, description, supplier, product_type, unit,
       status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, 0, 0, NULL, NULL, NULL, NULL, 'Pcs', 'active', ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, 0, NULL, NULL, NULL, NULL, 'Pcs', 'active', ?, ?)`,
+  )
+  const movement = db.prepare(
+    `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, notes, created_by, created_at)
+     VALUES (?, ?, ?, 'opening', ?, 'product', 'Opening stock', ?, ?)`,
   )
   try {
     withTransaction(() => {
       for (const row of fresh) {
+        const id = generateId()
+        const stock = Number.isFinite(row.openingStock) ? row.openingStock : 0
         stmt.run([
-          generateId(),
+          id,
           user.companyId,
           row.name,
           row.sku || null,
@@ -268,9 +286,12 @@ export async function importStarterCatalog(catalogId: string) {
           row.purchaseRate,
           row.sellingRate,
           row.taxRate,
+          stock,
+          stock,
           ts,
           ts,
         ])
+        if (stock !== 0) movement.run([generateId(), user.companyId, id, stock, user.id, ts])
       }
       writeAudit(
         user.companyId,
@@ -283,6 +304,7 @@ export async function importStarterCatalog(catalogId: string) {
     })
   } finally {
     stmt.free()
+    movement.free()
   }
   return { count: fresh.length, skipped: rows.length - fresh.length, name: catalog.name }
 }

@@ -676,6 +676,7 @@ export function SettingsPage() {
               Backup Now saves a BusinessBackup file in the folder below. If Google Drive is on, that same file is uploaded to the connected account.
             </p>
             <LocalBackupCard />
+            <ImportBackupCard />
             <Field label="Backup Schedule">
               <Select value={settings.backup_schedule || 'daily'} onChange={(e) => setSettings({ ...settings, backup_schedule: e.target.value })}>
                 <option value="daily">Every day</option>
@@ -733,6 +734,61 @@ export function SettingsPage() {
       ) : null}
 
       {tab === 'audit' ? <AuditPanel /> : null}
+    </div>
+  )
+}
+
+function ImportBackupCard() {
+  const { showToast } = useAppStore()
+  const [busy, setBusy] = useState(false)
+  const [password, setPassword] = useState('')
+  const [needsPassword, setNeedsPassword] = useState(false)
+
+  async function importBackup() {
+    if (
+      !confirm(
+        'Add this backup to the data already in Bizora?\n\nNothing already here is removed. Matching records are skipped.',
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    try {
+      const result = (await callApi(() => window.bizora.restoreBackup(needsPassword ? password : undefined))) as {
+        added?: number
+        skipped?: number
+      } | null
+      if (!result) return
+      const added = result.added || 0
+      const skipped = result.skipped || 0
+      showToast(
+        added ? `Added ${added} records. Skipped ${skipped} duplicates.` : `Nothing new to add. Skipped ${skipped} duplicates.`,
+        'success',
+      )
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : ''
+      if (code === 'INVALID_PASSWORD') setNeedsPassword(true)
+      showToast(err instanceof Error ? err.message : 'Import failed', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <h3 className="text-sm font-semibold">Import a backup</h3>
+      <p className="text-sm text-ink-muted">
+        If Bizora was deleted and installed again, the backup files are still in Documents\Bizora\Backups. Choose a
+        BusinessBackup file to add those customers, invoices, and products. Records that are already in Bizora are skipped.
+      </p>
+      {needsPassword ? (
+        <Field label="Backup password">
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+      ) : null}
+      <Button variant="outline" disabled={busy} onClick={() => void importBackup()}>
+        {busy ? 'Importing…' : 'Import backup file'}
+      </Button>
     </div>
   )
 }
@@ -857,14 +913,19 @@ function GoogleDrivePanel() {
   }
 
   async function restore(fileId: string, name: string) {
-    if (!confirm(`Restore ${name}?\n\nThis replaces the business data on this computer.`)) return
+    if (!confirm(`Add ${name} to the data already in Bizora?\n\nNothing already here is removed. Matching records are skipped.`)) return
     setBusy(true)
     try {
-      await callApi(() => window.bizora.restoreFromGoogleDrive(fileId))
-      showToast('Backup restored from Google Drive', 'success')
-      window.location.reload()
+      const result = (await callApi(() => window.bizora.restoreFromGoogleDrive(fileId))) as { added?: number; skipped?: number }
+      const added = result.added || 0
+      const skipped = result.skipped || 0
+      showToast(
+        added ? `Added ${added} records. Skipped ${skipped} duplicates.` : `Nothing new to add. Skipped ${skipped} duplicates.`,
+        'success',
+      )
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Restore failed', 'error')
+    } finally {
       setBusy(false)
     }
   }
@@ -1055,11 +1116,16 @@ export function RestorePage() {
 
   async function restore() {
     try {
-      const result = await callApi(() => window.bizora.restoreBackup())
+      const result = (await callApi(() => window.bizora.restoreBackup())) as { added?: number; skipped?: number } | null
       if (!result) return
-      showToast('Backup restored. Please sign in.', 'success')
+      const added = result.added || 0
+      const skipped = result.skipped || 0
+      showToast(
+        added ? `Added ${added} records. Skipped ${skipped} duplicates.` : `Nothing new to add. Skipped ${skipped} duplicates.`,
+        'success',
+      )
       await bootstrap()
-      navigate('/login')
+      navigate('/sales/new')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Restore failed', 'error')
     }

@@ -272,3 +272,60 @@ export async function listSharedCatalog(companyCategory?: string): Promise<{
     companyCategory: companyCategory?.trim() || undefined,
   })
 }
+
+export interface CatalogCategory {
+  key: string
+  name: string
+  description: string
+  productCount: number
+}
+
+export interface CatalogItem {
+  name: string
+  sku: string
+  barcode: string
+  category: string
+  hsn: string
+  taxType: 'gst' | 'non_gst'
+  gstRate: number
+  purchaseRate: number
+  sellingRate: number
+  openingStock: number
+}
+
+/** Shared categories stored for download into the local app. */
+export async function listCatalogCategories(): Promise<CatalogCategory[]> {
+  if (!cloudReady()) return []
+  return callConvex<CatalogCategory[]>('query', 'catalog:listCategories', {})
+}
+
+/** One page of a category, for the bulk-add screen. */
+export async function listCatalogPage(
+  catalogKey: string,
+  opts?: { cursor?: string; limit?: number },
+): Promise<{ items: CatalogItem[]; cursor: string; isDone: boolean }> {
+  if (!cloudReady()) return { items: [], cursor: '', isDone: true }
+  return callConvex<{ items: CatalogItem[]; cursor: string; isDone: boolean }>('query', 'catalog:listItems', {
+    catalogKey,
+    cursor: opts?.cursor || undefined,
+    limit: opts?.limit ?? 40,
+  })
+}
+
+/** Every shared product in one category, for copying into the local database. */
+export async function listCatalogItems(catalogKey: string): Promise<CatalogItem[]> {
+  if (!cloudReady()) return []
+  const items: CatalogItem[] = []
+  let cursor = ''
+  for (;;) {
+    const page = await callConvex<{ items: CatalogItem[]; cursor: string; isDone: boolean }>('query', 'catalog:listItems', {
+      catalogKey,
+      cursor: cursor || undefined,
+      limit: 200,
+    })
+    items.push(...(page.items || []))
+    if (page.isDone || !page.cursor) break
+    cursor = page.cursor
+  }
+  return items
+}

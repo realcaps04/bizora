@@ -44,7 +44,7 @@ const api = {
   listProductCatalog: () => invoke(IpcChannels.PRODUCTS_CATALOG),
   importProductCatalog: (companyCategory: string) => invoke(IpcChannels.PRODUCTS_IMPORT_CATALOG, { companyCategory }),
   listStarterCatalogs: () => invoke(IpcChannels.PRODUCTS_STARTER_CATALOGS),
-  previewStarterCatalog: (catalogId: string, opts?: { search?: string; page?: number; pageSize?: number }) =>
+  previewStarterCatalog: (catalogId: string, opts?: { search?: string; cursor?: string; pageSize?: number }) =>
     invoke(IpcChannels.PRODUCTS_PREVIEW_STARTER, { catalogId, ...opts }),
   importStarterCatalog: (catalogId: string) => invoke(IpcChannels.PRODUCTS_IMPORT_STARTER, { catalogId }),
   importProductsCsv: (companyCategory: string, csvText: string) =>

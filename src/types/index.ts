@@ -102,7 +102,7 @@ export interface BizoraApi {
   listProductCatalog: () => Promise<ApiResult<unknown>>
   importProductCatalog: (companyCategory: string) => Promise<ApiResult<unknown>>
   listStarterCatalogs: () => Promise<ApiResult<unknown>>
-  previewStarterCatalog: (catalogId: string, opts?: { search?: string; page?: number; pageSize?: number }) => Promise<ApiResult<unknown>>
+  previewStarterCatalog: (catalogId: string, opts?: { search?: string; cursor?: string; pageSize?: number }) => Promise<ApiResult<unknown>>
   importStarterCatalog: (catalogId: string) => Promise<ApiResult<unknown>>
   importProductsCsv: (companyCategory: string, csvText: string) => Promise<ApiResult<unknown>>
   updateProduct: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
