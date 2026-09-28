@@ -691,20 +691,29 @@ export function SettingsPage() {
             <Button onClick={() => void saveSettings()}>Save</Button>
           </Card>
           <Card className="space-y-4 p-5">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={settings.google_drive_backup === 'true'}
-                onChange={(e) => void setGoogleDriveChoice(e.target.checked)}
+            <div className="flex items-start gap-3">
+              <img
+                src={`${import.meta.env.BASE_URL}google-drive.svg`}
+                alt="Google Drive"
+                width={32}
+                height={32}
+                className="mt-0.5 h-8 w-8 shrink-0"
               />
-              <span>
-                <span className="text-sm font-semibold">Google Drive backup</span>
-                <span className="mt-1 block text-sm text-ink-muted">
-                  Optional. Leave this off and the backup stays only in the folder above. Turn it on to upload that file to this business’s Google Drive.
+              <label className="flex min-w-0 flex-1 items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={settings.google_drive_backup === 'true'}
+                  onChange={(e) => void setGoogleDriveChoice(e.target.checked)}
+                />
+                <span>
+                  <span className="text-sm font-semibold">Google Drive backup</span>
+                  <span className="mt-1 block text-sm text-ink-muted">
+                    Optional. Leave this off and the backup stays only in the folder above. Turn it on to upload that file to this business’s Google Drive.
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+            </div>
             {settings.google_drive_backup === 'true' ? <GoogleDrivePanel /> : null}
           </Card>
         </div>
@@ -948,9 +957,18 @@ function GoogleDrivePanel() {
       {status?.connected ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-            <div>
-              <div className="text-sm font-semibold text-emerald-950">Google Drive connected</div>
-              <div className="text-[13px] text-emerald-900">{status.email || 'Signed in'}</div>
+            <div className="flex items-center gap-2.5">
+              <img
+                src={`${import.meta.env.BASE_URL}google-drive.svg`}
+                alt=""
+                width={22}
+                height={22}
+                className="h-[22px] w-[22px] shrink-0"
+              />
+              <div>
+                <div className="text-sm font-semibold text-emerald-950">Google Drive connected</div>
+                <div className="text-[13px] text-emerald-900">{status.email || 'Signed in'}</div>
+              </div>
             </div>
             <Button variant="outline" disabled={busy} onClick={() => void disconnect()}>
               Disconnect
