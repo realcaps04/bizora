@@ -1,18 +1,109 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Pencil } from 'lucide-react'
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Spinner, Textarea } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatMoney, statusTone } from '@/utils'
 import type { Customer } from '@/types'
 
-export function CustomersPage() {
+const emptyCustomer = { name: '', phone: '', email: '', gstin: '', address: '' }
+
+function CustomerEditor({
+  open,
+  customerId,
+  initial,
+  onClose,
+  onSaved,
+}: {
+  open: boolean
+  customerId: string | null
+  initial: typeof emptyCustomer
+  onClose: () => void
+  onSaved: () => void
+}) {
   const { showToast } = useAppStore()
+  const [form, setForm] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const initialRef = useRef(initial)
+  initialRef.current = initial
+
+  useEffect(() => {
+    if (open) setForm(initialRef.current)
+  }, [open, customerId])
+
+  async function save() {
+    setSaving(true)
+    try {
+      if (customerId) {
+        await callApi(() => window.bizora.updateCustomer({ id: customerId, ...form }))
+        showToast('Customer updated', 'success')
+      } else {
+        await callApi(() => window.bizora.createCustomer(form))
+        showToast('Customer added', 'success')
+      }
+      onSaved()
+      onClose()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to save customer', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      title={customerId ? 'Edit Customer' : 'Add Customer'}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={saving || !form.name.trim()}>
+            {saving ? 'Saving…' : 'Save Customer'}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Customer Name" className="sm:col-span-2">
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </Field>
+        <Field label="Phone">
+          <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+        </Field>
+        <Field label="Email">
+          <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </Field>
+        <Field label="GSTIN">
+          <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
+        </Field>
+        <Field label="Address" className="sm:col-span-2">
+          <Textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+function customerForm(customer?: Pick<Customer, 'name' | 'phone' | 'email' | 'gstin' | 'address'>) {
+  return {
+    name: customer?.name || '',
+    phone: customer?.phone || '',
+    email: customer?.email || '',
+    gstin: customer?.gstin || '',
+    address: customer?.address || '',
+  }
+}
+
+export function CustomersPage() {
   const [params, setParams] = useSearchParams()
   const [rows, setRows] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(params.get('new') === '1')
-  const [form, setForm] = useState({ name: '', phone: '', email: '', gstin: '', address: '' })
+  const [editing, setEditing] = useState<Customer | null>(null)
 
   async function load() {
     setLoading(true)
@@ -28,17 +119,10 @@ export function CustomersPage() {
     void load()
   }, [search])
 
-  async function save() {
-    try {
-      await callApi(() => window.bizora.createCustomer(form))
-      showToast('Customer added', 'success')
-      setOpen(false)
-      setParams({})
-      setForm({ name: '', phone: '', email: '', gstin: '', address: '' })
-      await load()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Unable to save customer', 'error')
-    }
+  function closeEditor() {
+    setOpen(false)
+    setEditing(null)
+    setParams({})
   }
 
   return (
@@ -49,6 +133,7 @@ export function CustomersPage() {
         actions={
           <Button
             onClick={() => {
+              setEditing(null)
               setOpen(true)
             }}
           >
@@ -75,6 +160,7 @@ export function CustomersPage() {
                 <th className="px-4 py-2.5 font-medium text-right">Total Purchases</th>
                 <th className="px-4 py-2.5 font-medium text-right">Outstanding</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium" />
               </tr>
             </thead>
             <tbody>
@@ -93,6 +179,20 @@ export function CustomersPage() {
                   <td className="px-4 py-2.5">
                     <Badge tone={statusTone(c.status) as never}>{c.status}</Badge>
                   </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      type="button"
+                      aria-label={`Edit ${c.name}`}
+                      title="Edit"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#62789A] hover:bg-[#F7FAFD] hover:text-[#0878F9]"
+                      onClick={() => {
+                        setEditing(c)
+                        setOpen(true)
+                      }}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -100,42 +200,13 @@ export function CustomersPage() {
         </div>
       )}
 
-      <Modal
+      <CustomerEditor
         open={open}
-        title="Add Customer"
-        onClose={() => {
-          setOpen(false)
-          setParams({})
-        }}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void save()} disabled={!form.name.trim()}>
-              Save Customer
-            </Button>
-          </>
-        }
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Customer Name" className="sm:col-span-2">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </Field>
-          <Field label="Phone">
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          </Field>
-          <Field label="Email">
-            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </Field>
-          <Field label="GSTIN">
-            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} />
-          </Field>
-          <Field label="Address" className="sm:col-span-2">
-            <Textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          </Field>
-        </div>
-      </Modal>
+        customerId={editing?.id || null}
+        initial={customerForm(editing || undefined)}
+        onClose={closeEditor}
+        onSaved={() => void load()}
+      />
     </div>
   )
 }
@@ -146,15 +217,31 @@ export function CustomerDetailPage({ id }: { id: string }) {
     invoices: { id: string; invoice_number: string; invoice_date: string; grand_total: number; payment_status: string }[]
     stats: { total_sales: number; paid: number; outstanding: number }
   } | null>(null)
+  const [editing, setEditing] = useState(false)
+
+  function load() {
+    void callApi(() => window.bizora.getCustomer(id)).then((d) => setData(d as never))
+  }
 
   useEffect(() => {
-    void callApi(() => window.bizora.getCustomer(id)).then((d) => setData(d as never))
+    load()
   }, [id])
 
   if (!data) return <Spinner />
   return (
     <div>
-      <PageHeader title={data.customer.name} subtitle={data.customer.phone || data.customer.email || 'Customer profile'} />
+      <PageHeader
+        title={data.customer.name}
+        subtitle={data.customer.phone || data.customer.email || 'Customer profile'}
+        actions={<Button onClick={() => setEditing(true)}>Edit</Button>}
+      />
+      <CustomerEditor
+        open={editing}
+        customerId={data.customer.id}
+        initial={customerForm(data.customer)}
+        onClose={() => setEditing(false)}
+        onSaved={load}
+      />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
           ['Total Sales', formatMoney(data.stats.total_sales)],
