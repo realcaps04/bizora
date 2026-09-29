@@ -54,11 +54,19 @@ export interface DocumentPrintProps {
   className?: string
 }
 
-const DEFAULT_INVOICE_TERMS = [
+export const DEFAULT_INVOICE_TERMS = [
   'Goods once sold will not be taken back.',
   'Interest @ 18% p.a. will be charged on overdue payments.',
   'Subject to Kerala jurisdiction.',
 ]
+
+export function termsFromSetting(value?: string | null): string[] | undefined {
+  const lines = String(value || '')
+    .split('\n')
+    .map((line) => line.replace(/^\d+\.\s*/, '').trim())
+    .filter(Boolean)
+  return lines.length ? lines : undefined
+}
 
 const DEFAULT_QUOTATION_TERMS = [
   'This quotation is valid until the date mentioned above.',

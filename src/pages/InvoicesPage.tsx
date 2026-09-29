@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Ban, X } from 'lucide-react'
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
-import { DocumentPrint } from '@/components/DocumentPrint'
+import { DocumentPrint, termsFromSetting } from '@/components/DocumentPrint'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatDate, formatMoney, statusTone } from '@/utils'
 import type { Invoice } from '@/types'
@@ -273,6 +273,7 @@ export function InvoiceDetailPage() {
         paidAmount={Number(invoice.paid_amount || 0)}
         balanceDue={balance}
         notes={invoice.notes}
+        terms={termsFromSetting(settings.invoice_terms)}
         bank={{
           accountName: settings.bank_account_name,
           accountNumber: settings.bank_account_number,

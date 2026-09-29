@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button, PageHeader, Spinner } from '@/components/ui'
-import { DocumentPrint } from '@/components/DocumentPrint'
+import { DocumentPrint, termsFromSetting } from '@/components/DocumentPrint'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatDate } from '@/utils'
 
@@ -127,7 +127,7 @@ export function QuotationDetailPage() {
         igst={0}
         grandTotal={Number(quotation.grand_total)}
         notes={noteOnly || 'Thank you for your business'}
-        terms={termsFromNotes}
+        terms={termsFromNotes?.length ? termsFromNotes : termsFromSetting(settings.invoice_terms)}
         bank={{
           accountName: settings.bank_account_name,
           accountNumber: settings.bank_account_number,

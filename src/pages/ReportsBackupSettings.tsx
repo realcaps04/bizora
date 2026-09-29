@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
+import { DEFAULT_INVOICE_TERMS, termsFromSetting } from '@/components/DocumentPrint'
 import { BrandLogo } from '@/components/BrandLogo'
 import { UpiQr, isUpiId } from '@/components/UpiQr'
 import { useAppStore } from '@/stores/app'
@@ -297,6 +298,7 @@ function invoiceFieldErrors(
   company: Record<string, unknown>,
   settings: Record<string, string>,
   accountConfirm: string,
+  savedAccountNumber: string,
   strict: boolean,
 ) {
   const errors: Record<string, string> = {}
@@ -332,10 +334,11 @@ function invoiceFieldErrors(
   if (accountNumber && !/^\d{9,18}$/.test(accountNumber)) {
     errors.accountNumber = 'Account number must be 9 to 18 digits'
   }
+  const accountChanged = accountNumber !== savedAccountNumber.replace(/\D/g, '')
   const confirm = accountConfirm.replace(/\D/g, '')
-  if (accountNumber && !confirm) {
+  if (accountChanged && accountNumber && !confirm) {
     if (strict) errors.accountConfirm = 'Re-enter the account number'
-  } else if (confirm && confirm !== accountNumber && (strict || confirm.length >= accountNumber.length)) {
+  } else if (accountChanged && confirm && confirm !== accountNumber && (strict || confirm.length >= accountNumber.length)) {
     errors.accountConfirm = 'Account numbers do not match'
   }
   if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
@@ -449,6 +452,10 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [invoiceAttempted, setInvoiceAttempted] = useState(false)
   const [accountConfirm, setAccountConfirm] = useState('')
+  const [savedAccountNumber, setSavedAccountNumber] = useState('')
+  const [invoiceTerms, setInvoiceTerms] = useState<{ id: string; text: string }[]>(() =>
+    DEFAULT_INVOICE_TERMS.map((text) => ({ id: crypto.randomUUID(), text })),
+  )
   const [pin, setPin] = useState('')
   const [passwords, setPasswords] = useState({ current: '', next: '' })
 
@@ -457,8 +464,12 @@ export function SettingsPage() {
       callApi(() => window.bizora.getCompany()),
       callApi(() => window.bizora.getSettings()),
     ]).then(([c, s]) => {
+      const loaded: Record<string, string> = { place_of_supply: 'Kerala (32)', ...(s as Record<string, string>) }
       setCompany(c as Record<string, unknown>)
-      setSettings({ place_of_supply: 'Kerala (32)', ...(s as Record<string, string>) })
+      setSettings(loaded)
+      setSavedAccountNumber((loaded.bank_account_number || '').replace(/\D/g, ''))
+      const savedTerms = termsFromSetting(loaded.invoice_terms) ?? DEFAULT_INVOICE_TERMS
+      setInvoiceTerms(savedTerms.map((text) => ({ id: crypto.randomUUID(), text })))
     })
   }, [])
 
@@ -501,8 +512,12 @@ export function SettingsPage() {
       bank_ifsc: (settings.bank_ifsc || '').replace(/\s/g, '').toUpperCase(),
       bank_name: (settings.bank_name || '').trim(),
       upi_id: (settings.upi_id || '').trim(),
+      invoice_terms: invoiceTerms
+        .map((row) => row.text.trim())
+        .filter(Boolean)
+        .join('\n'),
     }
-    const errors = invoiceFieldErrors(nextCompany, nextSettings, accountConfirm, true)
+    const errors = invoiceFieldErrors(nextCompany, nextSettings, accountConfirm, savedAccountNumber, true)
     setCompany(nextCompany)
     setSettings(nextSettings)
     const first = Object.values(errors)[0]
@@ -513,7 +528,8 @@ export function SettingsPage() {
     await callApi(() => window.bizora.updateCompany(nextCompany))
     await refreshCompany()
     await callApi(() => window.bizora.updateSettings(nextSettings))
-    setAccountConfirm(nextSettings.bank_account_number)
+    setSavedAccountNumber(nextSettings.bank_account_number)
+    setAccountConfirm('')
     showToast('Invoice settings saved', 'success')
   }
 
@@ -539,7 +555,9 @@ export function SettingsPage() {
 
   if (!company) return <Spinner />
 
-  const invoiceErrors = invoiceFieldErrors(company, settings, accountConfirm, invoiceAttempted)
+  const invoiceErrors = invoiceFieldErrors(company, settings, accountConfirm, savedAccountNumber, invoiceAttempted)
+  const accountNumberChanged =
+    (settings.bank_account_number || '').replace(/\D/g, '') !== savedAccountNumber.replace(/\D/g, '')
   const invalidInput = 'border-red-500 focus:border-red-500 focus:ring-red-500/15'
 
   const tabs = [
@@ -649,11 +667,14 @@ export function SettingsPage() {
                   maxLength={18}
                   placeholder="9 to 18 digits"
                   className={invoiceErrors.accountNumber ? invalidInput : ''}
-                  onChange={(e) =>
-                    setSettings({ ...settings, bank_account_number: e.target.value.replace(/\D/g, '').slice(0, 18) })
-                  }
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/\D/g, '').slice(0, 18)
+                    setSettings({ ...settings, bank_account_number: next })
+                    setAccountConfirm('')
+                  }}
                 />
               </Field>
+              {accountNumberChanged && (settings.bank_account_number || '').length > 0 ? (
               <Field label="Re-enter Account Number" error={invoiceErrors.accountConfirm}>
                 <Input
                   value={accountConfirm}
@@ -666,6 +687,7 @@ export function SettingsPage() {
                   onPaste={(e) => e.preventDefault()}
                 />
               </Field>
+              ) : null}
               <Field label="IFSC Code" error={invoiceErrors.ifsc}>
                 <Input
                   value={settings.bank_ifsc || ''}
@@ -708,6 +730,44 @@ export function SettingsPage() {
                 </div>
               ) : null}
           </div>
+          </div>
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="text-sm font-semibold">Terms and conditions (PDF)</div>
+            <p className="mt-1 text-xs text-ink-muted">
+              These lines print on every invoice. The lines already used on the PDF are listed here. Add another if you need more.
+            </p>
+            <div className="mt-3 space-y-2">
+              {invoiceTerms.map((row, index) => (
+                <div key={row.id} className="flex items-center gap-2">
+                  <span className="w-5 shrink-0 text-right text-[12px] text-ink-muted">{index + 1}.</span>
+                  <Input
+                    value={row.text}
+                    maxLength={240}
+                    placeholder="Add a term"
+                    onChange={(e) =>
+                      setInvoiceTerms((prev) =>
+                        prev.map((item) => (item.id === row.id ? { ...item, text: e.target.value } : item)),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setInvoiceTerms((prev) => prev.filter((item) => item.id !== row.id))}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3"
+              onClick={() => setInvoiceTerms((prev) => [...prev, { id: crypto.randomUUID(), text: '' }])}
+            >
+              Add term
+            </Button>
           </div>
           <Button className="mt-4" onClick={() => void saveInvoiceSettings()}>
             Save Invoice Settings
