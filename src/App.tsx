@@ -19,6 +19,7 @@ import { NewPurchasePage } from '@/pages/NewPurchasePage'
 import { NewQuotationPage } from '@/pages/NewQuotationPage'
 import { QuotationDetailPage } from '@/pages/QuotationDetailPage'
 import { QuotationsPage, PurchasesPage, ExpensesPage, PaymentsPage } from '@/pages/OperationsPages'
+import { ReturnsPage } from '@/pages/ReturnsPage'
 import {
   ReportsPage,
   SettingsPage,
@@ -114,6 +115,7 @@ export default function App() {
           <Route path="/quotations/:id/edit" element={<EditQuotationRoute />} />
           <Route path="/quotations/:id" element={<QuotationDetailPage />} />
           <Route path="/quotations" element={<QuotationsPage />} />
+          <Route path="/returns" element={<ReturnsPage />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:id" element={<CustomerDetailRoute />} />
           <Route path="/products/new" element={<AddProductPage />} />

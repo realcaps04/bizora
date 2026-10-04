@@ -25,6 +25,7 @@ export interface Customer {
   email?: string
   gstin?: string
   address?: string
+  details?: string
   status: string
   total_purchases?: number
   outstanding?: number
@@ -57,6 +58,7 @@ export interface Invoice {
   status: string
   payment_status: string
   payment_method?: string
+  supply_type?: string
   subtotal: number
   discount_amount: number
   taxable_amount: number
@@ -125,6 +127,9 @@ export interface BizoraApi {
   convertQuotation: (id: string) => Promise<ApiResult<unknown>>
   deleteQuotation: (id: string) => Promise<ApiResult<unknown>>
   nextQuotationNumber: () => Promise<ApiResult<unknown>>
+  listReturns: (kind?: 'sale' | 'purchase') => Promise<ApiResult<unknown>>
+  getReturnSource: (kind: 'sale' | 'purchase', sourceId: string) => Promise<ApiResult<unknown>>
+  createReturn: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   listPurchases: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   createPurchase: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   nextPurchaseNumber: () => Promise<ApiResult<unknown>>

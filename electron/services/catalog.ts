@@ -110,14 +110,15 @@ export function createCustomer(input: {
   email?: string
   gstin?: string
   address?: string
+  details?: string
 }) {
   const user = requirePermission('customers.manage')
   const id = generateId()
   const ts = now()
   run(
-    `INSERT INTO customers (id, company_id, name, phone, email, gstin, address, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
-    [id, user.companyId, input.name.trim(), input.phone ?? null, input.email ?? null, input.gstin ?? null, input.address ?? null, ts, ts],
+    `INSERT INTO customers (id, company_id, name, phone, email, gstin, address, details, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+    [id, user.companyId, input.name.trim(), input.phone ?? null, input.email ?? null, input.gstin ?? null, input.address ?? null, input.details ?? null, ts, ts],
   )
   writeAudit(user.companyId, user, 'customer.created', 'customers', id, `Customer ${input.name} created`)
   return queryOne('SELECT * FROM customers WHERE id = ?', [id])
@@ -134,6 +135,7 @@ export function updateCustomer(id: string, patch: Record<string, unknown>) {
       email = COALESCE(?, email),
       gstin = COALESCE(?, gstin),
       address = COALESCE(?, address),
+      details = COALESCE(?, details),
       status = COALESCE(?, status),
       updated_at = ?
      WHERE id = ? AND company_id = ?`,
@@ -143,6 +145,7 @@ export function updateCustomer(id: string, patch: Record<string, unknown>) {
       patch.email ?? null,
       patch.gstin ?? null,
       patch.address ?? null,
+      patch.details ?? null,
       patch.status ?? null,
       now(),
       id,

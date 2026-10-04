@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS customers (
   email TEXT,
   gstin TEXT,
   address TEXT,
+  details TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   status TEXT NOT NULL DEFAULT 'confirmed',
   payment_status TEXT NOT NULL DEFAULT 'unpaid',
   payment_method TEXT,
+  supply_type TEXT NOT NULL DEFAULT 'Business to Customer',
   subtotal REAL NOT NULL DEFAULT 0,
   discount_amount REAL NOT NULL DEFAULT 0,
   taxable_amount REAL NOT NULL DEFAULT 0,
@@ -109,6 +111,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   grand_total REAL NOT NULL DEFAULT 0,
   paid_amount REAL NOT NULL DEFAULT 0,
   notes TEXT,
+  details TEXT,
   created_by TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -132,6 +135,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   tax_amount REAL NOT NULL DEFAULT 0,
   amount REAL NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  details TEXT,
   FOREIGN KEY (invoice_id) REFERENCES invoices(id),
   FOREIGN KEY (company_id) REFERENCES companies(id)
 );
@@ -253,6 +257,37 @@ CREATE TABLE IF NOT EXISTS settings (
   FOREIGN KEY (company_id) REFERENCES companies(id)
 );
 
+CREATE TABLE IF NOT EXISTS returns (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL,
+  return_number TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('sale', 'purchase')),
+  source_id TEXT NOT NULL,
+  source_number TEXT NOT NULL,
+  party_name TEXT NOT NULL,
+  return_date TEXT NOT NULL,
+  notes TEXT,
+  grand_total REAL NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(company_id, return_number),
+  FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+
+CREATE TABLE IF NOT EXISTS return_items (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL,
+  return_id TEXT NOT NULL,
+  source_item_id TEXT NOT NULL,
+  product_id TEXT,
+  product_name TEXT NOT NULL,
+  qty REAL NOT NULL,
+  rate REAL NOT NULL,
+  amount REAL NOT NULL,
+  FOREIGN KEY (return_id) REFERENCES returns(id),
+  FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+
 CREATE TABLE IF NOT EXISTS stock_movements (
   id TEXT PRIMARY KEY,
   company_id TEXT NOT NULL,
@@ -282,6 +317,8 @@ CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(company_id, payment_s
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_quotations_company ON quotations(company_id);
 CREATE INDEX IF NOT EXISTS idx_purchases_company ON purchases(company_id);
+CREATE INDEX IF NOT EXISTS idx_returns_company ON returns(company_id, kind);
+CREATE INDEX IF NOT EXISTS idx_return_items_return ON return_items(return_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_company ON expenses(company_id);
 CREATE INDEX IF NOT EXISTS idx_payments_company ON payments(company_id);
 CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id);

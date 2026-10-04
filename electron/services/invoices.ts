@@ -16,6 +16,9 @@ export interface InvoiceItemInput {
   rate: number
   discount?: number
   taxRate?: number
+  cessRate?: number
+  otherCharges?: number
+  details?: string
 }
 
 function calcItem(item: InvoiceItemInput) {
@@ -23,11 +26,14 @@ function calcItem(item: InvoiceItemInput) {
   const rate = Number(item.rate) || 0
   const discount = Number(item.discount) || 0
   const taxRate = Number(item.taxRate) || 0
+  const cessRate = Number(item.cessRate) || 0
+  const otherCharges = Number(item.otherCharges) || 0
   const base = qty * rate
   const afterDiscount = Math.max(0, base - discount)
   const taxAmount = (afterDiscount * taxRate) / 100
-  const amount = afterDiscount + taxAmount
-  return { qty, rate, discount, taxRate, taxAmount, amount, afterDiscount }
+  const cessAmount = (afterDiscount * cessRate) / 100
+  const amount = round2(afterDiscount + taxAmount + cessAmount + otherCharges)
+  return { qty, rate, discount, taxRate, taxAmount, cessAmount, otherCharges, amount, afterDiscount }
 }
 
 function round2(n: number) {
@@ -131,25 +137,98 @@ export function getInvoice(id: string) {
   return { invoice, items, payments, company, customer }
 }
 
+const SUPPLY_TYPES = new Set(['Business to Customer', 'Business to Business'])
+const DEFAULT_SUPPLY_TYPE = 'Business to Customer'
+
+function normalizeSupplyType(value?: string | null) {
+  const trimmed = String(value || '').trim()
+  return SUPPLY_TYPES.has(trimmed) ? trimmed : DEFAULT_SUPPLY_TYPE
+}
+
+function customerNameOrDefault(name: string | undefined, supplyType: string | undefined, fallback: string) {
+  const written = String(name || '').trim()
+  if (written) return written
+  if (normalizeSupplyType(supplyType) === 'Business to Customer') return 'Cash Sales'
+  return fallback
+}
+
+function saleDetails(raw?: string): Record<string, unknown> {
+  if (!raw?.trim()) return {}
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    throw new AppError('Invoice details are invalid.', 'VALIDATION')
+  }
+}
+
+function assertB2b(input: {
+  supplyType?: string
+  customerName?: string
+  customerId?: string
+  details?: string
+  paymentMethod?: string
+  paidAmount?: number
+  status?: 'draft' | 'confirmed'
+  items: InvoiceItemInput[]
+}) {
+  if (input.status === 'draft' || normalizeSupplyType(input.supplyType) !== 'Business to Business') return
+  if (!String(input.customerName || '').trim() && !input.customerId) {
+    throw new AppError('Enter the customer / business name.', 'VALIDATION')
+  }
+  const details = saleDetails(input.details)
+  const gstin = String(details.gstin || '').trim().toUpperCase()
+  if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {
+    throw new AppError('Enter a valid buyer GSTIN.', 'VALIDATION')
+  }
+  if (!String(details.billingAddress || '').trim()) throw new AppError('Enter the billing address.', 'VALIDATION')
+  if (!String(details.state || '').trim() || !String(details.stateCode || '').trim()) {
+    throw new AppError('Select the buyer state.', 'VALIDATION')
+  }
+  if (!String(details.placeOfSupply || '').trim()) throw new AppError('Select the place of supply.', 'VALIDATION')
+  if (details.shipDifferent && !String(details.shippingAddress || '').trim()) {
+    throw new AppError('Enter the shipping address.', 'VALIDATION')
+  }
+  if (!String(details.invoiceType || '').trim()) throw new AppError('Select the invoice type.', 'VALIDATION')
+  const paid = Number(input.paidAmount) || 0
+  const paying = paid > 0 || details.paymentStatus === 'paid' || details.paymentStatus === 'partial'
+  if (paying) {
+    if (!String(input.paymentMethod || '').trim()) throw new AppError('Select the payment method.', 'VALIDATION')
+    if (!(paid > 0)) throw new AppError('Enter the amount paid.', 'VALIDATION')
+    if (!String(details.paymentDate || '').trim()) throw new AppError('Enter the payment date.', 'VALIDATION')
+  }
+  for (const item of input.items) {
+    if (!(Number(item.qty) > 0)) throw new AppError(`Enter the quantity for ${item.productName}.`, 'VALIDATION')
+    if (!(Number(item.rate) > 0)) throw new AppError(`Enter the rate for ${item.productName}.`, 'VALIDATION')
+    if ((Number(item.taxRate) || 0) > 0 && !String(item.hsn || '').trim()) {
+      throw new AppError(`Enter HSN/SAC for ${item.productName}.`, 'VALIDATION')
+    }
+  }
+}
+
 export function createInvoice(input: {
   customerId?: string
   customerName?: string
   invoiceDate?: string
   paymentMethod?: string
+  supplyType?: string
   items: InvoiceItemInput[]
   discountAmount?: number
   notes?: string
+  details?: string
   interState?: boolean
   paidAmount?: number
+  paymentDate?: string
   status?: 'draft' | 'confirmed'
 }) {
   const user = requirePermission('invoices.create')
   if (!input.items?.length) throw new AppError('Add at least one product to the invoice.', 'VALIDATION')
 
   const status = input.status === 'draft' ? 'draft' : 'confirmed'
+  assertB2b({ ...input, status })
   const ts = now()
   const invoiceDate = input.invoiceDate || ts.slice(0, 10)
-  let customerName = input.customerName || 'Walk-in Customer'
+  let customerName = customerNameOrDefault(input.customerName, input.supplyType, 'Walk-in Customer')
   if (input.customerId) {
     const c = queryOne<{ name: string }>('SELECT name FROM customers WHERE id = ? AND company_id = ?', [
       input.customerId,
@@ -166,6 +245,8 @@ export function createInvoice(input: {
   const discountAmount = round2(lineDiscount + extraDiscount)
   const taxable = round2(Math.max(0, calculated.reduce((s, i) => s + i.afterDiscount, 0) - extraDiscount))
   const totalTax = round2(calculated.reduce((s, i) => s + i.taxAmount, 0))
+  const cessTotal = round2(calculated.reduce((s, i) => s + i.cessAmount, 0))
+  const otherTotal = round2(calculated.reduce((s, i) => s + i.otherCharges, 0))
 
   let cgst = 0
   let sgst = 0
@@ -177,7 +258,7 @@ export function createInvoice(input: {
     sgst = round2(totalTax / 2)
   }
 
-  const beforeRound = taxable + totalTax
+  const beforeRound = taxable + totalTax + cessTotal + otherTotal
   const grandTotal = Math.round(beforeRound)
   const roundOff = round2(grandTotal - beforeRound)
 
@@ -204,9 +285,9 @@ export function createInvoice(input: {
     run(
       `INSERT INTO invoices (
         id, company_id, invoice_number, customer_id, customer_name, invoice_date,
-        status, payment_status, payment_method, subtotal, discount_amount, taxable_amount,
-        cgst, sgst, igst, round_off, grand_total, paid_amount, notes, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status, payment_status, payment_method, supply_type, subtotal, discount_amount, taxable_amount,
+        cgst, sgst, igst, round_off, grand_total, paid_amount, notes, details, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         invoiceId,
         user.companyId,
@@ -217,6 +298,7 @@ export function createInvoice(input: {
         status,
         paymentStatus,
         input.paymentMethod ?? null,
+        normalizeSupplyType(input.supplyType),
         subtotal,
         discountAmount,
         taxable,
@@ -227,6 +309,7 @@ export function createInvoice(input: {
         grandTotal,
         paidAmount,
         input.notes ?? null,
+        input.details ?? null,
         user.id,
         ts,
         ts,
@@ -237,8 +320,8 @@ export function createInvoice(input: {
       const calc = calculated[idx]
       run(
         `INSERT INTO invoice_items (
-          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order, details
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           generateId(),
           user.companyId,
@@ -253,6 +336,7 @@ export function createInvoice(input: {
           calc.taxAmount,
           calc.amount,
           idx,
+          item.details ?? null,
         ],
       )
 
@@ -286,7 +370,7 @@ export function createInvoice(input: {
           invoiceId,
           input.customerId ?? null,
           customerName,
-          invoiceDate,
+          input.paymentDate || invoiceDate,
           input.paymentMethod || 'Cash',
           paidAmount,
           user.id,
@@ -316,9 +400,14 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
   if (!input.items?.length) throw new AppError('Add at least one product to the invoice.', 'VALIDATION')
 
   const status = input.status === 'draft' ? 'draft' : 'confirmed'
+  assertB2b({ ...input, status })
   const ts = now()
   const invoiceDate = input.invoiceDate || String(existing.invoice_date || ts.slice(0, 10))
-  let customerName = input.customerName || String(existing.customer_name || 'Walk-in Customer')
+  let customerName = customerNameOrDefault(
+    input.customerName,
+    input.supplyType,
+    String(existing.customer_name || 'Walk-in Customer'),
+  )
   if (input.customerId) {
     const c = queryOne<{ name: string }>('SELECT name FROM customers WHERE id = ? AND company_id = ?', [
       input.customerId,
@@ -335,6 +424,8 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
   const discountAmount = round2(lineDiscount + extraDiscount)
   const taxable = round2(Math.max(0, calculated.reduce((s, i) => s + i.afterDiscount, 0) - extraDiscount))
   const totalTax = round2(calculated.reduce((s, i) => s + i.taxAmount, 0))
+  const cessTotal = round2(calculated.reduce((s, i) => s + i.cessAmount, 0))
+  const otherTotal = round2(calculated.reduce((s, i) => s + i.otherCharges, 0))
 
   let cgst = 0
   let sgst = 0
@@ -346,7 +437,7 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
     sgst = round2(totalTax / 2)
   }
 
-  const beforeRound = taxable + totalTax
+  const beforeRound = taxable + totalTax + cessTotal + otherTotal
   const grandTotal = Math.round(beforeRound)
   const roundOff = round2(grandTotal - beforeRound)
 
@@ -387,8 +478,9 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
     run(
       `UPDATE invoices SET
         customer_id = ?, customer_name = ?, invoice_date = ?, status = ?, payment_status = ?, payment_method = ?,
+        supply_type = ?,
         subtotal = ?, discount_amount = ?, taxable_amount = ?, cgst = ?, sgst = ?, igst = ?, round_off = ?,
-        grand_total = ?, paid_amount = ?, notes = ?, updated_at = ?
+        grand_total = ?, paid_amount = ?, notes = ?, details = ?, updated_at = ?
        WHERE id = ? AND company_id = ?`,
       [
         input.customerId ?? null,
@@ -397,6 +489,7 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
         status,
         paymentStatus,
         input.paymentMethod ?? null,
+        normalizeSupplyType(input.supplyType ?? (existing.supply_type as string | undefined)),
         subtotal,
         discountAmount,
         taxable,
@@ -407,6 +500,7 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
         grandTotal,
         paidAmount,
         input.notes === undefined ? (existing.notes ?? null) : input.notes,
+        input.details === undefined ? ((existing.details as string | null) ?? null) : input.details,
         ts,
         id,
         user.companyId,
@@ -417,8 +511,8 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
       const calc = calculated[idx]
       run(
         `INSERT INTO invoice_items (
-          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order, details
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           generateId(),
           user.companyId,
@@ -433,6 +527,7 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
           calc.taxAmount,
           calc.amount,
           idx,
+          item.details ?? null,
         ],
       )
       if (item.productId) {
@@ -465,7 +560,7 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
           id,
           input.customerId ?? null,
           customerName,
-          invoiceDate,
+          input.paymentDate || invoiceDate,
           input.paymentMethod || 'Cash',
           paidAmount,
           user.id,

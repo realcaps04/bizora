@@ -38,6 +38,13 @@ export interface DocumentPrintProps {
   paymentMode?: string | null
   status?: string | null
   placeOfSupply?: string | null
+  supplyType?: string | null
+  invoiceType?: string | null
+  poNumber?: string | null
+  reverseCharge?: boolean
+  shippingAddress?: string | null
+  cess?: number
+  otherCharges?: number
   items: PrintLineItem[]
   subtotal: number
   discount: number
@@ -129,6 +136,13 @@ export function DocumentPrint({
   paymentMode,
   status,
   placeOfSupply,
+  supplyType,
+  invoiceType,
+  poNumber,
+  reverseCharge,
+  shippingAddress,
+  cess = 0,
+  otherCharges = 0,
   items,
   subtotal,
   discount,
@@ -248,6 +262,9 @@ export function DocumentPrint({
             ) : null}
             {customer.phone ? <div className="text-[#4A5D78]">Phone: {customer.phone}</div> : null}
             {customer.gstin ? <div className="text-[#4A5D78]">GSTIN: {customer.gstin}</div> : null}
+            {shippingAddress ? (
+              <div className="whitespace-pre-line text-[#4A5D78]">Ship to: {shippingAddress}</div>
+            ) : null}
           </div>
         </div>
         <div>
@@ -259,6 +276,29 @@ export function DocumentPrint({
               Place of Supply:{' '}
               <span className="font-medium text-[#0F2744]">{placeOfSupply || 'Kerala'}</span>
             </div>
+            {isInvoice ? (
+              <div>
+                Supply Type:{' '}
+                <span className="font-medium text-[#0F2744]">
+                  {supplyType || 'Business to Customer'}
+                </span>
+              </div>
+            ) : null}
+            {invoiceType ? (
+              <div>
+                Invoice Type: <span className="font-medium text-[#0F2744]">{invoiceType}</span>
+              </div>
+            ) : null}
+            {poNumber ? (
+              <div>
+                PO Number: <span className="font-medium text-[#0F2744]">{poNumber}</span>
+              </div>
+            ) : null}
+            {reverseCharge ? (
+              <div>
+                Reverse Charge: <span className="font-medium text-[#0F2744]">Yes</span>
+              </div>
+            ) : null}
             <div>
               {isInvoice ? 'Payment Due date' : 'Valid Till'}:{' '}
               <span className="font-medium text-[#0F2744]">{formatDate(dueOrValidDate)}</span>
@@ -343,6 +383,8 @@ export function DocumentPrint({
                   <TotalRow label={`SGST(${avgHalf}%)`} value={formatMoney(sgst)} />
                 </>
               )}
+              {cess > 0 ? <TotalRow label="Cess" value={formatMoney(cess)} /> : null}
+              {otherCharges > 0 ? <TotalRow label="Other Charges" value={formatMoney(otherCharges)} /> : null}
               <TotalRow label="Total" value={formatMoney(grandTotal)} bold />
               {isInvoice ? (
                 <>

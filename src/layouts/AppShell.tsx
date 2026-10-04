@@ -10,7 +10,6 @@ import {
   Wallet,
   CreditCard,
   BarChart3,
-  UserCog,
   Settings,
   Lock,
   LogOut,
@@ -18,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ClipboardList,
+  Undo2,
   X,
 } from 'lucide-react'
 import { useAppStore } from '@/stores/app'
@@ -55,6 +55,7 @@ const primaryNav: NavItem[] = [
   { to: '/invoices', label: 'Invoices', icon: FileText },
   { to: '/quotations/new', label: 'Quotations', icon: Quote, end: true },
   { to: '/quotations', label: 'Quotation List', icon: ClipboardList, end: true },
+  { to: '/returns', label: 'Returns', icon: Undo2 },
   { to: '/customers', label: 'Customers', icon: Users },
   { to: '/products', label: 'Products', icon: Package },
   { to: '/purchases/new', label: 'Purchases', icon: Truck, end: true },
@@ -65,7 +66,6 @@ const primaryNav: NavItem[] = [
 ]
 
 const secondaryNav: NavItem[] = [
-  { to: '/staff', label: 'Staff', icon: UserCog },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

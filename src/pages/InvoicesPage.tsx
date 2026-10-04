@@ -1,11 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Ban, X } from 'lucide-react'
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
 import { DocumentPrint, termsFromSetting } from '@/components/DocumentPrint'
+import { parseB2b, parseLineExtra } from '@/data/b2b'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatDate, formatMoney, statusTone } from '@/utils'
-import type { Invoice } from '@/types'
+import {
+  downloadInvoiceListExcel,
+  downloadInvoiceListPdf,
+  downloadOneInvoiceExcel,
+  downloadOneInvoicePdf,
+  safeFileName,
+} from '@/utils/invoiceExport'
+import type { Customer, Invoice } from '@/types'
 
 export function SalesPage() {
   const [rows, setRows] = useState<Invoice[]>([])
@@ -50,11 +58,33 @@ export function SalesPage() {
   )
 }
 
+async function fetchAllInvoices() {
+  const all: Invoice[] = []
+  let page = 1
+  let total = Number.POSITIVE_INFINITY
+  while (all.length < total) {
+    const data = (await callApi(() => window.bizora.listInvoices({ page, pageSize: 100 }))) as {
+      rows: Invoice[]
+      total: number
+    }
+    total = Number(data.total) || 0
+    const batch = data.rows || []
+    all.push(...batch)
+    if (!batch.length) break
+    page += 1
+  }
+  return all
+}
+
 export function InvoicesPage() {
+  const { showToast } = useAppStore()
   const [tab, setTab] = useState('all')
   const [rows, setRows] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [directoryNames, setDirectoryNames] = useState<string[]>([])
+  const [exporting, setExporting] = useState('')
 
   useEffect(() => {
     void (async () => {
@@ -70,6 +100,70 @@ export function InvoicesPage() {
       }
     })()
   }, [tab, search])
+
+  useEffect(() => {
+    void callApi(() => window.bizora.listCustomers({ pageSize: 200 }))
+      .then((data) => {
+        const names = ((data as { rows?: Customer[] }).rows || [])
+          .map((customer) => customer.name.trim())
+          .filter(Boolean)
+        setDirectoryNames(names)
+      })
+      .catch(() => {})
+  }, [])
+
+  const nameOptions = useMemo(() => {
+    const names = new Set(directoryNames)
+    for (const row of rows) {
+      const name = String(row.customer_name || '').trim()
+      if (name) names.add(name)
+    }
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [directoryNames, rows])
+
+  async function downloadAll(format: 'pdf' | 'excel') {
+    setExporting(`all-${format}`)
+    try {
+      const invoices = await fetchAllInvoices()
+      if (!invoices.length) {
+        showToast('No invoices to download', 'error')
+        return
+      }
+      if (format === 'pdf') downloadInvoiceListPdf(invoices, 'invoices-all.pdf', 'All invoices')
+      else downloadInvoiceListExcel(invoices, 'invoices-all.xls')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to download invoices', 'error')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  async function downloadByName(format: 'pdf' | 'excel') {
+    const wanted = customerName.trim().toLowerCase()
+    if (!wanted) {
+      showToast('Enter a customer name', 'error')
+      return
+    }
+    setExporting(`name-${format}`)
+    try {
+      const invoices = await fetchAllInvoices()
+      const exact = invoices.filter((invoice) => String(invoice.customer_name || '').trim().toLowerCase() === wanted)
+      const matched = exact.length
+        ? exact
+        : invoices.filter((invoice) => String(invoice.customer_name || '').trim().toLowerCase().includes(wanted))
+      if (!matched.length) {
+        showToast(`No invoices for ${customerName.trim()}`, 'error')
+        return
+      }
+      const file = `invoices-${safeFileName(customerName)}`
+      if (format === 'pdf') downloadInvoiceListPdf(matched, `${file}.pdf`, `Invoices for ${customerName.trim()}`)
+      else downloadInvoiceListExcel(matched, `${file}.xls`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to download invoices', 'error')
+    } finally {
+      setExporting('')
+    }
+  }
 
   const tabs = [
     { id: 'all', label: 'All' },
@@ -95,12 +189,61 @@ export function InvoicesPage() {
         ))}
         <Input className="ml-auto max-w-xs" placeholder="Search invoices…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
-      {loading ? <Spinner /> : rows.length === 0 ? <EmptyState title="No invoices found" /> : <InvoiceTable rows={rows} />}
+      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-white px-3 py-2.5">
+        <div className="mr-1 pb-1 text-[12px] font-medium text-ink-muted">Download</div>
+        <Button size="sm" variant="outline" disabled={Boolean(exporting)} onClick={() => void downloadAll('pdf')}>
+          {exporting === 'all-pdf' ? 'Preparing…' : 'All PDF'}
+        </Button>
+        <Button size="sm" variant="outline" disabled={Boolean(exporting)} onClick={() => void downloadAll('excel')}>
+          {exporting === 'all-excel' ? 'Preparing…' : 'All Excel'}
+        </Button>
+        <label className="ml-auto block min-w-[200px] flex-1">
+          <span className="mb-1 block text-[12px] font-medium text-ink-muted">Customer name</span>
+          <Input
+            list="invoice-customer-names"
+            placeholder="Download by customer name"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+          />
+          <datalist id="invoice-customer-names">
+            {nameOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </label>
+        <Button size="sm" variant="outline" disabled={Boolean(exporting) || !customerName.trim()} onClick={() => void downloadByName('pdf')}>
+          {exporting === 'name-pdf' ? 'Preparing…' : 'Name PDF'}
+        </Button>
+        <Button size="sm" variant="outline" disabled={Boolean(exporting) || !customerName.trim()} onClick={() => void downloadByName('excel')}>
+          {exporting === 'name-excel' ? 'Preparing…' : 'Name Excel'}
+        </Button>
+      </div>
+      {loading ? <Spinner /> : rows.length === 0 ? <EmptyState title="No invoices found" /> : <InvoiceTable rows={rows} downloads />}
     </div>
   )
 }
 
-function InvoiceTable({ rows }: { rows: Invoice[] }) {
+function InvoiceTable({ rows, downloads = false }: { rows: Invoice[]; downloads?: boolean }) {
+  const { showToast } = useAppStore()
+  const [busyId, setBusyId] = useState('')
+
+  async function downloadOne(invoice: Invoice, format: 'pdf' | 'excel') {
+    setBusyId(`${invoice.id}:${format}`)
+    try {
+      const data = (await callApi(() => window.bizora.getInvoice(invoice.id))) as {
+        invoice: Invoice & Record<string, unknown>
+        items: Record<string, unknown>[]
+      }
+      const file = safeFileName(invoice.invoice_number)
+      if (format === 'pdf') downloadOneInvoicePdf(data.invoice, data.items, `${file}.pdf`)
+      else downloadOneInvoiceExcel(data.invoice, data.items, `${file}.xls`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to download this invoice', 'error')
+    } finally {
+      setBusyId('')
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-white">
       <table className="w-full text-left text-sm">
@@ -135,15 +278,32 @@ function InvoiceTable({ rows }: { rows: Invoice[] }) {
               </td>
               <td className="px-4 py-2.5">{inv.created_by_name || '—'}</td>
               <td className="px-4 py-2.5">
-                {inv.status === 'cancelled' ? (
-                  '—'
-                ) : (
-                  <Link to={`/invoices/${inv.id}/edit`}>
-                    <Button size="sm" variant="outline">
-                      Edit
-                    </Button>
-                  </Link>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {downloads ? (
+                    <Select
+                      className="h-7 w-[118px] text-xs"
+                      value=""
+                      disabled={busyId.startsWith(`${inv.id}:`)}
+                      onChange={(e) => {
+                        const format = e.target.value as 'pdf' | 'excel' | ''
+                        if (format === 'pdf' || format === 'excel') void downloadOne(inv, format)
+                      }}
+                    >
+                      <option value="">{busyId.startsWith(`${inv.id}:`) ? 'Preparing…' : 'Download'}</option>
+                      <option value="pdf">PDF</option>
+                      <option value="excel">Excel</option>
+                    </Select>
+                  ) : null}
+                  {inv.status === 'cancelled' ? (
+                    downloads ? null : '—'
+                  ) : (
+                    <Link to={`/invoices/${inv.id}/edit`}>
+                      <Button size="sm" variant="outline">
+                        Edit
+                      </Button>
+                    </Link>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -207,12 +367,22 @@ export function InvoiceDetailPage() {
   if (!data) return <Spinner />
   const { invoice, items, company, customer } = data
   const balance = Math.max(0, Number(invoice.grand_total) - Number(invoice.paid_amount || 0))
-  const dueDate = (() => {
+  const b2b = parseB2b(invoice.details)
+  const dueDate = b2b.dueDate || (() => {
     const d = new Date(invoice.invoice_date)
     if (Number.isNaN(d.getTime())) return invoice.invoice_date
     d.setDate(d.getDate() + 15)
     return d.toISOString().slice(0, 10)
   })()
+  const lineExtras = items.map((item) => {
+    const extra = parseLineExtra(item.details)
+    const taxable = Math.max(0, Number(item.qty) * Number(item.rate) - Number(item.discount || 0))
+    return { cess: (taxable * extra.cessRate) / 100, other: extra.otherCharges }
+  })
+  const cessTotal = lineExtras.reduce((sum, row) => sum + row.cess, 0)
+  const otherTotal = lineExtras.reduce((sum, row) => sum + row.other, 0)
+  const billingAddress = b2b.billingAddress || (customer?.address ? String(customer.address) : '')
+  const stateLine = b2b.state ? `${b2b.state}${b2b.stateCode ? ` (${b2b.stateCode})` : ''}` : ''
 
   return (
     <div>
@@ -243,16 +413,23 @@ export function InvoiceDetailPage() {
         company={company}
         customer={{
           name: String(customer?.name || invoice.customer_name || 'Walk-in Customer'),
-          address: customer?.address ? String(customer.address) : undefined,
-          phone: customer?.phone ? String(customer.phone) : undefined,
-          gstin: customer?.gstin ? String(customer.gstin) : undefined,
+          address: [billingAddress, stateLine].filter(Boolean).join('\n') || undefined,
+          phone: b2b.mobile || (customer?.phone ? String(customer.phone) : undefined),
+          gstin: b2b.gstin || (customer?.gstin ? String(customer.gstin) : undefined),
         }}
         documentNumber={invoice.invoice_number}
         documentDate={invoice.invoice_date}
         dueOrValidDate={dueDate}
         paymentMode={invoice.payment_method}
         status={invoice.payment_status}
-        placeOfSupply={settings.place_of_supply || 'Kerala (32)'}
+        placeOfSupply={b2b.placeOfSupply || settings.place_of_supply || 'Kerala (32)'}
+        supplyType={invoice.supply_type || 'Business to Customer'}
+        invoiceType={invoice.supply_type === 'Business to Business' ? b2b.invoiceType : undefined}
+        poNumber={b2b.poNumber || undefined}
+        reverseCharge={b2b.reverseCharge}
+        shippingAddress={b2b.shipDifferent ? b2b.shippingAddress : undefined}
+        cess={cessTotal}
+        otherCharges={otherTotal}
         items={items.map((item) => ({
           id: String(item.id),
           productName: String(item.product_name),

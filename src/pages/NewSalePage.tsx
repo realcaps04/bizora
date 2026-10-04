@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   Calendar,
+  ChevronDown,
   FileText,
   Plus,
   Printer,
@@ -10,9 +11,23 @@ import {
   Settings,
   Trash2,
 } from 'lucide-react'
+import { B2bSaleForm } from '@/components/B2bSaleForm'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatMoney, joinAddress, parseAddress } from '@/utils'
+import {
+  applyCustomerProfile,
+  dueDateFromTerms,
+  emptyB2b,
+  emptyLineExtra,
+  isInterState,
+  parseB2b,
+  parseLineExtra,
+  serializeLineExtra,
+  validateB2bSale,
+  type B2bDetails,
+  type PaymentStatus,
+} from '@/data/b2b'
 import { PRODUCT_UNITS, productUnit } from '@/data/units'
 import type { Customer, Product } from '@/types'
 
@@ -26,6 +41,13 @@ interface LineItem {
   rate: number
   discount: number
   taxRate: number
+  discountPercent: number
+  cessRate: number
+  otherCharges: number
+  batch: string
+  serial: string
+  mrp: number
+  description: string
 }
 
 const GST_OPTIONS = [0, 5, 12, 18, 28]
@@ -44,7 +66,14 @@ function rateFromAmount(amount: number, qty: number, discount: number, taxRate: 
   const factor = 1 + taxRate / 100
   if (factor <= 0) return 0
   const taxable = amount / factor
-  return round2(Math.max(0, (taxable + discount) / q))
+  return Math.max(0, (taxable + discount) / q)
+}
+
+function sanitizeAmountInput(value: string) {
+  const cleaned = value.replace(/,/g, '').replace(/[^\d.]/g, '')
+  const dot = cleaned.indexOf('.')
+  if (dot === -1) return cleaned
+  return `${cleaned.slice(0, dot + 1)}${cleaned.slice(dot + 1).replace(/\./g, '').slice(0, 2)}`
 }
 
 function splitStoredName(name: string): { productName: string; specification: string } {
@@ -63,6 +92,7 @@ function emptyLine(): LineItem {
     rate: 0,
     discount: 0,
     taxRate: 18,
+    ...emptyLineExtra(),
   }
 }
 
@@ -88,6 +118,12 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   const [place, setPlace] = useState('')
   const [gstin, setGstin] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('Cash')
+  const [supplyType, setSupplyType] = useState('Business to Customer')
+  const [b2b, setB2b] = useState<B2bDetails>(() => emptyB2b())
+  const [companyPlace, setCompanyPlace] = useState('Kerala (32)')
+  const [companyGstin, setCompanyGstin] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [itemMore, setItemMore] = useState<Record<string, boolean>>({})
   const [paidAmount, setPaidAmount] = useState(0)
   const [paidTouched, setPaidTouched] = useState(false)
   const [items, setItems] = useState<LineItem[]>(() => Array.from({ length: 2 }, () => emptyLine()))
@@ -105,6 +141,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
     const left = Math.min(rect.left, window.innerWidth - width - 8)
     setProductMenu({ top: rect.bottom + 4, left: Math.max(8, left), width })
   }
+  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [newCustomerOpen, setNewCustomerOpen] = useState(false)
   const [newCustomer, setNewCustomer] = useState({
@@ -143,6 +180,19 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   }, [invoiceId])
 
   useEffect(() => {
+    void callApi(() => window.bizora.getSettings())
+      .then((settings) => {
+        const place = String((settings as { place_of_supply?: string }).place_of_supply || 'Kerala (32)')
+        setCompanyPlace(place)
+        setB2b((prev) => (prev.placeOfSupply ? prev : { ...prev, placeOfSupply: place }))
+      })
+      .catch(() => {})
+    void callApi(() => window.bizora.getCompany())
+      .then((company) => setCompanyGstin(String((company as { gstin?: string } | null)?.gstin || '')))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (!invoiceId) return
     void (async () => {
       try {
@@ -161,6 +211,14 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
         setCustomerId(data.invoice.customer_id ? String(data.invoice.customer_id) : '')
         setCustomerQuery(String(data.invoice.customer_name || ''))
         setPaymentMethod(String(data.invoice.payment_method || 'Cash'))
+        setSupplyType(String(data.invoice.supply_type || 'Business to Customer'))
+        const loaded = parseB2b(data.invoice.details, '')
+        loaded.notes = data.invoice.notes ? String(data.invoice.notes) : loaded.notes
+        const paymentStatus = String(data.invoice.payment_status || '')
+        if (paymentStatus === 'paid' || paymentStatus === 'partial' || paymentStatus === 'unpaid') {
+          loaded.paymentStatus = paymentStatus
+        }
+        setB2b(loaded)
         setPaidAmount(Number(data.invoice.paid_amount) || 0)
         setPaidTouched(true)
         if (data.customer) {
@@ -181,6 +239,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
             rate: Number(row.rate) || 0,
             discount: Number(row.discount) || 0,
             taxRate: Number(row.tax_rate) || 0,
+            ...parseLineExtra(row.details),
           }
         })
         setItems(lines.length ? lines : [emptyLine()])
@@ -219,6 +278,9 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
     }
   }, [activeRowKey, productResults])
 
+  const isB2B = supplyType === 'Business to Business'
+  const interState = isB2B && isInterState(companyPlace, companyGstin, b2b.placeOfSupply)
+
   const filledItems = useMemo(
     () => items.filter((i) => i.productName.trim() && i.qty > 0),
     [items],
@@ -230,23 +292,50 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
     const afterLines = filledItems.map((i) => {
       const base = Math.max(0, i.qty * i.rate - i.discount)
       const tax = (base * i.taxRate) / 100
-      return { base, tax, taxRate: i.taxRate }
+      const cess = (base * (i.cessRate || 0)) / 100
+      const other = i.otherCharges || 0
+      return { base, tax, cess, other, taxRate: i.taxRate }
     })
     const taxable = round2(afterLines.reduce((s, i) => s + i.base, 0))
     const taxTotal = round2(afterLines.reduce((s, i) => s + i.tax, 0))
-    const cgst = round2(taxTotal / 2)
-    const sgst = round2(taxTotal / 2)
-    const igst = 0
-    const beforeRound = taxable + taxTotal
+    const cessTotal = round2(afterLines.reduce((s, i) => s + i.cess, 0))
+    const otherTotal = round2(afterLines.reduce((s, i) => s + i.other, 0))
+    const cgst = interState ? 0 : round2(taxTotal / 2)
+    const sgst = interState ? 0 : round2(taxTotal / 2)
+    const igst = interState ? taxTotal : 0
+    const beforeRound = taxable + taxTotal + cessTotal + otherTotal
     const grandTotal = Math.round(beforeRound)
     const roundOff = round2(grandTotal - beforeRound)
     const avgHalf = afterLines[0]?.taxRate ? afterLines[0].taxRate / 2 : 9
-    return { subtotal, discount, taxable, cgst, sgst, igst, roundOff, grandTotal, interState: false, avgHalf }
-  }, [filledItems])
+    return {
+      subtotal,
+      discount,
+      taxable,
+      cgst,
+      sgst,
+      igst,
+      cessTotal,
+      otherTotal,
+      roundOff,
+      grandTotal,
+      interState,
+      avgHalf,
+    }
+  }, [filledItems, interState])
 
   useEffect(() => {
-    if (!paidTouched) setPaidAmount(totals.grandTotal)
-  }, [totals.grandTotal, paidTouched])
+    if (!paidTouched && !isB2B) setPaidAmount(totals.grandTotal)
+  }, [totals.grandTotal, paidTouched, isB2B])
+
+  useEffect(() => {
+    if (!isB2B) return
+    setB2b((prev) => {
+      if (prev.dueTouched) return prev
+      const next = dueDateFromTerms(invoiceDate, prev.paymentTerms)
+      if (!next || next === prev.dueDate) return prev
+      return { ...prev, dueDate: next }
+    })
+  }, [invoiceDate, isB2B, b2b.paymentTerms])
 
   const balance = round2(Math.max(0, totals.grandTotal - paidAmount))
 
@@ -257,6 +346,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
     setHouseName(parsed.houseName)
     setPlace(parsed.place)
     setGstin(c.gstin || '')
+    setB2b((prev) => applyCustomerProfile(prev, c))
     setCustomerOpen(false)
   }
 
@@ -269,7 +359,56 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   }
 
   function updateItem(key: string, patch: Partial<LineItem>) {
-    setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)))
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.key !== key) return item
+        const next = { ...item, ...patch }
+        if (
+          patch.discount === undefined &&
+          (patch.qty !== undefined || patch.rate !== undefined || patch.discountPercent !== undefined) &&
+          next.discountPercent > 0
+        ) {
+          next.discount = round2((next.qty * next.rate * next.discountPercent) / 100)
+        }
+        if (patch.discount !== undefined && patch.discountPercent === undefined) {
+          const base = next.qty * next.rate
+          next.discountPercent = base > 0 ? round2((next.discount / base) * 100) : 0
+        }
+        return next
+      }),
+    )
+  }
+
+  function chooseEntry(next: string) {
+    setSupplyType(next)
+    setFieldErrors({})
+    if (next !== 'Business to Business') {
+      setPaidTouched(false)
+      return
+    }
+    setB2b((prev) => ({
+      ...prev,
+      gstin: prev.gstin || gstin.toUpperCase(),
+      billingAddress: prev.billingAddress || joinAddress(houseName, place),
+      placeOfSupply: prev.placeOfSupply || companyPlace,
+      invoiceType: prev.invoiceType || 'Tax Invoice',
+      paymentStatus: paidTouched ? prev.paymentStatus : 'unpaid',
+    }))
+    if (!paidTouched) {
+      setPaidAmount(0)
+      setPaidTouched(true)
+    }
+  }
+
+  function setPaymentStatus(status: PaymentStatus) {
+    setPaidTouched(true)
+    setB2b((prev) => ({
+      ...prev,
+      paymentStatus: status,
+      paymentDate: status === 'unpaid' ? prev.paymentDate : prev.paymentDate || invoiceDate,
+    }))
+    if (status === 'paid') setPaidAmount(totals.grandTotal)
+    if (status === 'unpaid') setPaidAmount(0)
   }
 
   function addBlankRow() {
@@ -320,6 +459,9 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
           rate: Number(p.selling_rate) || 0,
           discount: 0,
           taxRate: Number(p.tax_rate) || 18,
+          ...emptyLineExtra(),
+          description: String((p as Product & { description?: string }).description || ''),
+          mrp: Number((p as Product & { mrp?: number }).mrp) || 0,
         },
       ]
     })
@@ -363,14 +505,57 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
       showToast('Add at least one product', 'error')
       return
     }
-    setSaving(true)
-    try {
-      const payload = {
-        customerId: customerId || undefined,
-        customerName: selectedCustomer?.name || customerQuery || 'Walk-in Customer',
+    if (isB2B && mode !== 'draft') {
+      const errors = validateB2bSale({
+        customerName: customerQuery,
+        details: b2b,
         invoiceDate,
         paymentMethod,
-        interState: totals.interState,
+        paidAmount,
+        items,
+      })
+      setFieldErrors(errors)
+      const first = Object.values(errors)[0]
+      if (first) {
+        showToast(first, 'error')
+        return
+      }
+    } else {
+      setFieldErrors({})
+    }
+    setSaving(true)
+    try {
+      let nextCustomerId = customerId
+      if (isB2B && customerQuery.trim()) {
+        const profile = {
+          name: customerQuery.trim(),
+          phone: b2b.mobile,
+          email: b2b.email,
+          gstin: b2b.gstin,
+          address: b2b.billingAddress,
+          details: JSON.stringify(b2b),
+        }
+        if (nextCustomerId) {
+          await callApi(() => window.bizora.updateCustomer({ id: nextCustomerId, ...profile }))
+        } else {
+          const created = (await callApi(() => window.bizora.createCustomer(profile))) as Customer
+          nextCustomerId = created.id
+          setCustomerId(created.id)
+        }
+      }
+      const payload = {
+        customerId: nextCustomerId || undefined,
+        customerName: isB2B
+          ? customerQuery.trim()
+          : (selectedCustomer?.name || customerQuery).trim() ||
+            (supplyType === 'Business to Customer' ? 'Cash Sales' : 'Walk-in Customer'),
+        invoiceDate,
+        paymentMethod,
+        supplyType,
+        notes: isB2B ? b2b.notes : undefined,
+        details: isB2B ? JSON.stringify(b2b) : '',
+        paymentDate: isB2B ? b2b.paymentDate : undefined,
+        interState,
         paidAmount: mode === 'draft' ? 0 : paidAmount,
         status: mode === 'draft' ? 'draft' : 'confirmed',
         items: filledItems.map((i) => ({
@@ -383,6 +568,9 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
           rate: i.rate,
           discount: i.discount,
           taxRate: i.taxRate,
+          cessRate: i.cessRate,
+          otherCharges: i.otherCharges,
+          details: serializeLineExtra(i),
         })),
       }
       const result = await callApi(() =>
@@ -441,6 +629,33 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
 
           <div className="flex flex-wrap items-end gap-3">
             <label className="block">
+              <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Supply Type</span>
+              <div className="relative">
+                <select
+                  value={supplyType}
+                  onChange={(e) => chooseEntry(e.target.value)}
+                  className="h-9 w-[220px] appearance-none rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-3 pr-8 text-[13px] font-medium text-[#031C45] outline-none focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
+                >
+                  <option
+                    value="Business to Customer"
+                    style={{ backgroundColor: '#EAF4FF', color: '#031C45', fontWeight: 600 }}
+                  >
+                    Business to Customer
+                  </option>
+                  <option
+                    value="Business to Business"
+                    style={{ backgroundColor: '#EEF2FF', color: '#1E3A8A', fontWeight: 600 }}
+                  >
+                    Business to Business
+                  </option>
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]"
+                />
+              </div>
+            </label>
+            <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Invoice No.</span>
               <div className="relative">
                 <input
@@ -477,8 +692,31 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
           </div>
         </div>
 
+        {isB2B ? (
+          <B2bSaleForm
+            customerQuery={customerQuery}
+            customerOpen={customerOpen}
+            customers={filteredCustomers}
+            onCustomerQuery={(value) => {
+              setCustomerQuery(value)
+              setCustomerOpen(true)
+              if (!value) clearCustomer()
+            }}
+            onCustomerFocus={() => setCustomerOpen(true)}
+            onCustomerBlur={() => {
+              setTimeout(() => setCustomerOpen(false), 150)
+            }}
+            onSelectCustomer={selectCustomer}
+            onNewCustomer={() => setNewCustomerOpen(true)}
+            value={b2b}
+            onChange={(patch) => setB2b((prev) => ({ ...prev, ...patch }))}
+            errors={fieldErrors}
+            invoiceDate={invoiceDate}
+          />
+        ) : null}
+
         {/* Customer */}
-        <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
+        {!isB2B ? <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <div className="space-y-3">
               <div>
@@ -503,7 +741,11 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                           setCustomerOpen(false)
                         }, 150)
                       }
-                      placeholder="Search customer by name, phone or code."
+                      placeholder={
+                        supplyType === 'Business to Customer'
+                          ? 'Cash Sales'
+                          : 'Search customer by name, phone or code.'
+                      }
                       className="h-9 w-full rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] text-[#031C45] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                     />
                     {customerOpen && filteredCustomers.length > 0 ? (
@@ -558,7 +800,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
               </Field>
             </div>
           </div>
-        </section>
+        </section> : null}
 
         {/* Items */}
         <section className="rounded-[12px] border border-[#D8E4F2] bg-white shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
@@ -612,26 +854,34 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-[13px]">
+            <table className={`w-full text-left text-[13px] ${isB2B ? 'min-w-[1180px]' : 'min-w-[980px]'}`}>
               <thead>
                 <tr className="bg-[#F8FAFC] text-[11.5px] font-medium uppercase tracking-wide text-[#62789A]">
                   <th className="px-3 py-2.5 w-10">#</th>
                   <th className="px-3 py-2.5 min-w-[180px]">Product / Description</th>
                   <th className="px-3 py-2.5 min-w-[120px]">Unit</th>
-                  <th className="px-3 py-2.5 w-24">HSN</th>
-                  <th className="px-3 py-2.5 w-20">Qty</th>
-                  <th className="px-3 py-2.5 w-28">Rate (₹)</th>
+                  <th className="px-3 py-2.5 w-24">HSN{isB2B ? ' *' : ''}</th>
+                  <th className="px-3 py-2.5 w-20">Qty{isB2B ? ' *' : ''}</th>
+                  <th className="px-3 py-2.5 w-28">Rate (₹){isB2B ? ' *' : ''}</th>
                   <th className="px-3 py-2.5 w-28">Discount (₹)</th>
-                  <th className="px-3 py-2.5 w-24">GST %</th>
-                  <th className="px-3 py-2.5 w-28 text-right">Amount (₹)</th>
+                  <th className="px-3 py-2.5 w-24">GST %{isB2B ? ' *' : ''}</th>
+                  {isB2B ? <th className="px-3 py-2.5 w-28 text-right">Taxable (₹)</th> : null}
+                  <th className="px-3 py-2.5 w-36 text-right">{isB2B ? 'Line total (₹)' : 'Amount (₹)'}</th>
                   <th className="px-3 py-2.5 w-12" />
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, idx) => {
                   const amount = lineAmount(item)
+                  const base = Math.max(0, item.qty * item.rate - item.discount)
+                  const taxable = round2(base)
+                  const cessAmount = round2((base * item.cessRate) / 100)
+                  const lineTotal = round2(base * (1 + item.taxRate / 100) + cessAmount + item.otherCharges)
+                  const lineError = (field: string) =>
+                    fieldErrors[`${field}:${item.key}`] ? 'border-[#DC2626]' : 'border-[#D8E4F2]'
                   return (
-                    <tr key={item.key} className="border-t border-[#E8EEF5]">
+                    <Fragment key={item.key}>
+                    <tr className="border-t border-[#E8EEF5]">
                       <td className="px-3 py-2 text-[#62789A]">{idx + 1}</td>
                       <td className="relative px-3 py-2">
                         <input
@@ -652,12 +902,21 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                           placeholder="Type or search product..."
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"
                         />
+                        {isB2B ? (
+                          <button
+                            type="button"
+                            className="mt-1 text-[11px] font-medium text-[#0878F9]"
+                            onClick={() => setItemMore((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                          >
+                            {itemMore[item.key] ? 'Hide extra fields' : 'Batch, MRP, cess…'}
+                          </button>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2">
                         <select
                           value={productUnit(item.specification)}
                           onChange={(e) => updateItem(item.key, { specification: e.target.value })}
-                          className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px] outline-none focus:border-[#0878F9]"
+                          className={`h-8 w-full rounded border bg-white px-2 text-[13px] outline-none focus:border-[#0878F9] ${lineError('unit')}`}
                         >
                           {PRODUCT_UNITS.map((unit) => (
                             <option key={unit} value={unit}>
@@ -673,7 +932,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                         <input
                           value={item.hsn}
                           onChange={(e) => updateItem(item.key, { hsn: e.target.value })}
-                          className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"
+                          className={`h-8 w-full rounded border px-2 text-[13px] outline-none focus:border-[#0878F9] ${lineError('hsn')}`}
                         />
                       </td>
                       <td className="px-3 py-2">
@@ -683,7 +942,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                           step="any"
                           value={item.qty}
                           onChange={(e) => updateItem(item.key, { qty: Number(e.target.value) })}
-                          className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] tabular-nums outline-none focus:border-[#0878F9]"
+                          className={`h-8 w-full rounded border px-2 text-[13px] tabular-nums outline-none focus:border-[#0878F9] ${lineError('qty')}`}
                         />
                       </td>
                       <td className="px-3 py-2">
@@ -693,7 +952,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                           step="any"
                           value={item.rate}
                           onChange={(e) => updateItem(item.key, { rate: Number(e.target.value) })}
-                          className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] tabular-nums outline-none focus:border-[#0878F9]"
+                          className={`h-8 w-full rounded border px-2 text-[13px] tabular-nums outline-none focus:border-[#0878F9] ${lineError('rate')}`}
                         />
                       </td>
                       <td className="px-3 py-2">
@@ -719,20 +978,39 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                           ))}
                         </select>
                       </td>
+                      {isB2B ? (
+                        <td className="px-3 py-2 text-right text-[13px] tabular-nums text-[#62789A]">{formatMoney(taxable)}</td>
+                      ) : null}
                       <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={amount}
-                          onChange={(e) => {
-                            const nextAmount = Number(e.target.value) || 0
-                            updateItem(item.key, {
-                              rate: rateFromAmount(nextAmount, item.qty, item.discount, item.taxRate),
-                            })
-                          }}
-                          className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-right text-[13px] font-medium tabular-nums text-[#031C45] outline-none focus:border-[#0878F9]"
-                        />
+                        {isB2B ? (
+                          <div className="h-8 rounded border border-[#E8EEF5] bg-[#F8FAFC] px-2 text-right text-[13px] font-medium leading-8 tabular-nums text-[#031C45]">
+                            {formatMoney(lineTotal)}
+                          </div>
+                        ) : (
+                          <input
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={amountDrafts[item.key] ?? (amount ? String(amount) : '')}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => {
+                              const raw = sanitizeAmountInput(e.target.value)
+                              setAmountDrafts((prev) => ({ ...prev, [item.key]: raw }))
+                              const nextAmount = raw === '' || raw === '.' ? 0 : Number(raw)
+                              updateItem(item.key, {
+                                rate: rateFromAmount(nextAmount, item.qty, item.discount, item.taxRate),
+                              })
+                            }}
+                            onBlur={() => {
+                              setAmountDrafts((prev) => {
+                                if (!(item.key in prev)) return prev
+                                const next = { ...prev }
+                                delete next[item.key]
+                                return next
+                              })
+                            }}
+                            className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-right text-[13px] font-medium tabular-nums text-[#031C45] outline-none focus:border-[#0878F9]"
+                          />
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <button
@@ -748,6 +1026,81 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                         </button>
                       </td>
                     </tr>
+                    {isB2B && itemMore[item.key] ? (
+                      <tr className="border-t border-[#E8EEF5] bg-[#F8FAFC]">
+                        <td colSpan={11} className="px-3 py-2">
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                            <MiniField label="Discount %">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={item.discountPercent || ''}
+                                onChange={(e) => updateItem(item.key, { discountPercent: Number(e.target.value) || 0 })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                            <MiniField label="Batch Number">
+                              <input
+                                value={item.batch}
+                                onChange={(e) => updateItem(item.key, { batch: e.target.value })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                            <MiniField label="Serial Number">
+                              <input
+                                value={item.serial}
+                                onChange={(e) => updateItem(item.key, { serial: e.target.value })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                            <MiniField label="MRP (₹)">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={item.mrp || ''}
+                                onChange={(e) => updateItem(item.key, { mrp: Number(e.target.value) || 0 })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                            <MiniField label="Description">
+                              <input
+                                value={item.description}
+                                onChange={(e) => updateItem(item.key, { description: e.target.value })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                            <MiniField label="Cess %">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={item.cessRate || ''}
+                                onChange={(e) => updateItem(item.key, { cessRate: Number(e.target.value) || 0 })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                            <MiniField label="Cess amount">
+                              <div className="h-8 rounded border border-[#E8EEF5] bg-white px-2 text-[13px] leading-8 tabular-nums">
+                                {formatMoney(cessAmount)}
+                              </div>
+                            </MiniField>
+                            <MiniField label="Other charges (₹)">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={item.otherCharges || ''}
+                                onChange={(e) => updateItem(item.key, { otherCharges: Number(e.target.value) || 0 })}
+                                className="h-8 w-full rounded border border-[#D8E4F2] bg-white px-2 text-[13px]"
+                              />
+                            </MiniField>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   )
                 })}
               </tbody>
@@ -769,6 +1122,10 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                 <InlineTotal label={`SGST (${totals.avgHalf}%)`} value={formatMoney(totals.sgst)} />
               </>
             )}
+            {isB2B || totals.cessTotal > 0 ? <InlineTotal label="Cess" value={formatMoney(totals.cessTotal)} /> : null}
+            {isB2B || totals.otherTotal > 0 ? (
+              <InlineTotal label="Other charges" value={formatMoney(totals.otherTotal)} />
+            ) : null}
             <div className="ml-auto flex items-center gap-2 rounded-md bg-[#EAF4FF] px-3 py-1.5">
               <span className="font-semibold text-[#031C45]">Grand Total</span>
               <span className="text-[14px] font-bold tabular-nums text-[#031C45]">
@@ -782,8 +1139,26 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
         <section className="rounded-[12px] border border-[#D8E4F2] bg-white p-4 shadow-[0_2px_10px_rgba(6,41,92,0.03)]">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="flex flex-wrap gap-3">
+              {isB2B ? (
+                <label className="block">
+                  <span className="mb-1 block text-[12px] font-medium text-[#62789A]">
+                    Payment Status <span className="text-[#DC2626]">*</span>
+                  </span>
+                  <Select
+                    className="w-[140px]"
+                    value={b2b.paymentStatus}
+                    onChange={(e) => setPaymentStatus(e.target.value as PaymentStatus)}
+                  >
+                    <option value="unpaid">Unpaid</option>
+                    <option value="partial">Partial</option>
+                    <option value="paid">Paid</option>
+                  </Select>
+                </label>
+              ) : null}
               <label className="block">
-                <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Payment Method</span>
+                <span className="mb-1 block text-[12px] font-medium text-[#62789A]">
+                  Payment Method{isB2B && b2b.paymentStatus !== 'unpaid' ? <span className="text-[#DC2626]"> *</span> : null}
+                </span>
                 <Select
                   className="w-[160px]"
                   value={paymentMethod}
@@ -795,7 +1170,10 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                 </Select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Amount Paid (₹)</span>
+                <span className="mb-1 block text-[12px] font-medium text-[#62789A]">
+                  Amount Paid (₹)
+                  {isB2B && b2b.paymentStatus !== 'unpaid' ? <span className="text-[#DC2626]"> *</span> : null}
+                </span>
                 <Input
                   className="w-[140px]"
                   type="number"
@@ -803,15 +1181,58 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                   step="any"
                   value={paidAmount}
                   onChange={(e) => {
+                    const next = Number(e.target.value) || 0
                     setPaidTouched(true)
-                    setPaidAmount(Number(e.target.value) || 0)
+                    setPaidAmount(next)
+                    if (!isB2B) return
+                    setB2b((prev) => ({
+                      ...prev,
+                      paymentStatus: next <= 0 ? 'unpaid' : next >= totals.grandTotal ? 'paid' : 'partial',
+                      paymentDate: next > 0 ? prev.paymentDate || invoiceDate : prev.paymentDate,
+                    }))
                   }}
                 />
+                {fieldErrors.paidAmount ? <span className="mt-1 block text-[12px] text-[#DC2626]">{fieldErrors.paidAmount}</span> : null}
               </label>
               <label className="block">
                 <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Balance (₹)</span>
                 <Input className="w-[140px] bg-slate-50" readOnly value={balance} />
               </label>
+              {isB2B && b2b.paymentStatus !== 'unpaid' ? (
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-[12px] font-medium text-[#62789A]">
+                      Payment Date <span className="text-[#DC2626]">*</span>
+                    </span>
+                    <Input
+                      className="w-[160px]"
+                      type="date"
+                      value={b2b.paymentDate}
+                      onChange={(e) => setB2b((prev) => ({ ...prev, paymentDate: e.target.value }))}
+                    />
+                    {fieldErrors.paymentDate ? (
+                      <span className="mt-1 block text-[12px] text-[#DC2626]">{fieldErrors.paymentDate}</span>
+                    ) : null}
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Transaction / Reference No.</span>
+                    <Input
+                      className="w-[180px]"
+                      value={b2b.transactionRef}
+                      onChange={(e) => setB2b((prev) => ({ ...prev, transactionRef: e.target.value }))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[12px] font-medium text-[#62789A]">Bank / UPI Details</span>
+                    <Input
+                      className="w-[220px]"
+                      value={b2b.bankDetails}
+                      onChange={(e) => setB2b((prev) => ({ ...prev, bankDetails: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </label>
+                </>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -913,6 +1334,15 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
           )
         : null}
     </div>
+  )
+}
+
+function MiniField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium text-[#62789A]">{label}</span>
+      {children}
+    </label>
   )
 }
 

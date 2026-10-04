@@ -6,6 +6,7 @@ import * as catalog from '../services/catalog'
 import * as starterCatalogs from '../services/starterCatalogs'
 import * as invoices from '../services/invoices'
 import * as operations from '../services/operations'
+import * as returns from '../services/returns'
 import * as reports from '../services/reports'
 import * as backup from '../services/backup'
 import * as googleDrive from '../services/googleDrive'
@@ -177,6 +178,14 @@ export function registerIpcHandlers(): void {
       return true
     },
     [IpcChannels.QUOTATIONS_NEXT_NUMBER]: () => operations.nextQuotationNumber(),
+    [IpcChannels.RETURNS_LIST]: (payload) =>
+      returns.listReturns((payload as { kind?: 'sale' | 'purchase' } | undefined)?.kind),
+    [IpcChannels.RETURNS_SOURCE]: (payload) => {
+      const p = payload as { kind: 'sale' | 'purchase'; sourceId: string }
+      return returns.getReturnSource(p.kind, p.sourceId)
+    },
+    [IpcChannels.RETURNS_CREATE]: (payload) =>
+      returns.createReturn(payload as Parameters<typeof returns.createReturn>[0]),
     [IpcChannels.PURCHASES_LIST]: (payload) => operations.listPurchases((payload as object) || {}),
     [IpcChannels.PURCHASES_CREATE]: (payload) =>
       operations.createPurchase(payload as Parameters<typeof operations.createPurchase>[0]),

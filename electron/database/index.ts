@@ -54,6 +54,7 @@ export async function initDatabase(): Promise<void> {
 
   db.run(SCHEMA_SQL)
   ensureProductColumns()
+  ensureInvoiceColumns()
   const version = getMeta('schema_version')
   if (!version) {
     setMeta('schema_version', SCHEMA_VERSION)
@@ -80,6 +81,18 @@ function ensureProductColumns(): void {
   for (const [name, ddl] of PRODUCT_EXTRA_COLUMNS) {
     if (!have.has(name)) run(`ALTER TABLE products ADD COLUMN ${name} ${ddl}`)
   }
+}
+
+function addColumn(table: string, name: string, ddl: string): void {
+  const cols = queryAll<{ name: string }>(`PRAGMA table_info(${table})`)
+  if (!cols.some((col) => col.name === name)) run(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`)
+}
+
+function ensureInvoiceColumns(): void {
+  addColumn('invoices', 'supply_type', `TEXT NOT NULL DEFAULT 'Business to Customer'`)
+  addColumn('invoices', 'details', 'TEXT')
+  addColumn('invoice_items', 'details', 'TEXT')
+  addColumn('customers', 'details', 'TEXT')
 }
 
 export function getDb(): Database {
@@ -191,6 +204,8 @@ export function replaceDatabaseFromBuffer(raw: Buffer): void {
   db?.close()
   db = new SQL.Database(new Uint8Array(raw))
   db.run(SCHEMA_SQL)
+  ensureProductColumns()
+  ensureInvoiceColumns()
   persistNow()
 }
 

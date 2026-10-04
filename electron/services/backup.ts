@@ -286,8 +286,8 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
       )
       const customerByKey = new Map(existingCustomers.map((row) => [norm(row.name, row.phone), row.id]))
       const insertCustomer = prepare(
-        `INSERT INTO customers (id, company_id, name, phone, email, gstin, address, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO customers (id, company_id, name, phone, email, gstin, address, status, created_at, updated_at, details)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       for (const row of sourceRows(source, 'SELECT * FROM customers')) {
         const oldId = text(row.id)
@@ -314,6 +314,7 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
           text(row.status) || 'active',
           text(row.created_at) || new Date().toISOString(),
           text(row.updated_at) || new Date().toISOString(),
+          text(row.details) || null,
         ])
         customerByKey.set(norm(name, row.phone), id)
         customerMap.set(oldId, id)
@@ -396,9 +397,9 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
       const insertInvoice = prepare(
         `INSERT INTO invoices (
           id, company_id, invoice_number, customer_id, customer_name, invoice_date, status, payment_status,
-          payment_method, subtotal, discount_amount, taxable_amount, cgst, sgst, igst, round_off, grand_total,
-          paid_amount, notes, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          payment_method, supply_type, subtotal, discount_amount, taxable_amount, cgst, sgst, igst, round_off, grand_total,
+          paid_amount, notes, details, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       const addedInvoiceNumbers: string[] = []
       for (const row of sourceRows(source, 'SELECT * FROM invoices')) {
@@ -424,6 +425,7 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
           text(row.status) || 'confirmed',
           text(row.payment_status) || 'unpaid',
           text(row.payment_method) || null,
+          text(row.supply_type) || 'Business to Customer',
           num(row.subtotal),
           num(row.discount_amount),
           num(row.taxable_amount),
@@ -434,6 +436,7 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
           num(row.grand_total),
           num(row.paid_amount),
           text(row.notes) || null,
+          text(row.details) || null,
           actor(row.created_by),
           text(row.created_at) || new Date().toISOString(),
           text(row.updated_at) || new Date().toISOString(),
@@ -447,8 +450,8 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
 
       const insertInvoiceItem = prepare(
         `INSERT INTO invoice_items (
-          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id, company_id, invoice_id, product_id, product_name, hsn, qty, rate, discount, tax_rate, tax_amount, amount, sort_order, details
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       for (const row of sourceRows(source, 'SELECT * FROM invoice_items')) {
         const parent = text(row.invoice_id)
@@ -472,6 +475,7 @@ function mergeBackup(source: Database, companyId: string, currentUserId: string)
           num(row.tax_amount),
           num(row.amount),
           num(row.sort_order),
+          text(row.details) || null,
         ])
         added += 1
       }

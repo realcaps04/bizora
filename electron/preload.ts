@@ -68,6 +68,10 @@ const api = {
   convertQuotation: (id: string) => invoke(IpcChannels.QUOTATIONS_CONVERT, { id }),
   deleteQuotation: (id: string) => invoke(IpcChannels.QUOTATIONS_DELETE, { id }),
   nextQuotationNumber: () => invoke(IpcChannels.QUOTATIONS_NEXT_NUMBER),
+  listReturns: (kind?: 'sale' | 'purchase') => invoke(IpcChannels.RETURNS_LIST, { kind }),
+  getReturnSource: (kind: 'sale' | 'purchase', sourceId: string) =>
+    invoke(IpcChannels.RETURNS_SOURCE, { kind, sourceId }),
+  createReturn: (data: Record<string, unknown>) => invoke(IpcChannels.RETURNS_CREATE, data),
   listPurchases: (opts?: Record<string, unknown>) => invoke(IpcChannels.PURCHASES_LIST, opts),
   createPurchase: (data: Record<string, unknown>) => invoke(IpcChannels.PURCHASES_CREATE, data),
   nextPurchaseNumber: () => invoke(IpcChannels.PURCHASES_NEXT_NUMBER),
