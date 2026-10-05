@@ -34,10 +34,11 @@ const CATALOG_FILES: Record<string, string> = {
 }
 
 /** Bump when Product_list changes so existing companies pick up new rows. */
-const DEFAULT_PRODUCTS_VERSION = 'product-list-2'
+const DEFAULT_PRODUCTS_VERSION = 'product-list-3'
 
 const EXTRA_DEFAULT_FILES: Array<{ file: string; companyCategory: string }> = [
   { file: 'silpolin_tarpaulin_sheets_catalog.csv', companyCategory: 'Specialty Manufacturing' },
+  { file: 'tarpaulin_master_catalog_10000.csv', companyCategory: 'Specialty Manufacturing' },
 ]
 
 /** Company types shown on Bulk add. Add a CSV in public/ and set `CATALOG_FILES` when a file is ready. */
