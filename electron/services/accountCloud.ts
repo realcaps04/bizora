@@ -1,5 +1,7 @@
+import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { GST_BUSINESSES } from '../../src/data/gstBusinesses'
 import { queryAll, queryOne } from '../database'
 
 let envLoaded = false
@@ -11,7 +13,14 @@ export function loadAccountEnv(): void {
   const candidates = [
     path.join(process.cwd(), '.env'),
     path.join(process.cwd(), '..', '.env'),
+    path.join(path.dirname(process.execPath), '.env'),
   ]
+  try {
+    candidates.push(path.join(app.getAppPath(), '.env'), path.join(app.getAppPath(), '..', '.env'))
+  } catch {
+    /* app path is only available after Electron is ready */
+  }
+  if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, '.env'))
   for (const file of candidates) {
     if (!existsSync(file)) continue
     const text = readFileSync(file, 'utf8')
@@ -291,6 +300,25 @@ export interface CatalogItem {
   purchaseRate: number
   sellingRate: number
   openingStock: number
+}
+
+export interface GstBusiness {
+  name: string
+  gstin: string
+  registrationType: string
+  address: string
+}
+
+/** Shared GST registrations for the B2B business-name field. */
+export async function listGstBusinesses(): Promise<GstBusiness[]> {
+  if (!cloudReady()) return GST_BUSINESSES
+  try {
+    const rows = await callConvex<GstBusiness[]>('query', 'gstBusinesses:list', {})
+    return rows.length ? rows : GST_BUSINESSES
+  } catch (err) {
+    console.error('[convex] gst business list failed:', err instanceof Error ? err.message : err)
+    return GST_BUSINESSES
+  }
 }
 
 /** Shared categories stored for download into the local app. */

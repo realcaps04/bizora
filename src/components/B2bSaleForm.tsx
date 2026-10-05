@@ -5,6 +5,13 @@ import { GST_STATES, placeLabel, stateFromGstin } from '@/data/gstStates'
 import { INVOICE_TYPES, PAYMENT_TERMS, dueDateFromTerms, type B2bDetails } from '@/data/b2b'
 import type { Customer } from '@/types'
 
+export interface GstBusinessOption {
+  name: string
+  gstin: string
+  registrationType: string
+  address: string
+}
+
 const inputClass =
   'h-9 w-full rounded-md border border-[#D8E4F2] bg-white px-3 text-[13px] text-[#031C45] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15'
 
@@ -64,10 +71,12 @@ export function B2bSaleForm({
   customerQuery,
   customerOpen,
   customers,
+  gstBusinesses,
   onCustomerQuery,
   onCustomerFocus,
   onCustomerBlur,
   onSelectCustomer,
+  onSelectGstBusiness,
   onNewCustomer,
   value,
   onChange,
@@ -77,10 +86,12 @@ export function B2bSaleForm({
   customerQuery: string
   customerOpen: boolean
   customers: Customer[]
+  gstBusinesses: GstBusinessOption[]
   onCustomerQuery: (value: string) => void
   onCustomerFocus: () => void
   onCustomerBlur: () => void
   onSelectCustomer: (customer: Customer) => void
+  onSelectGstBusiness: (business: GstBusinessOption) => void
   onNewCustomer: () => void
   value: B2bDetails
   onChange: (patch: Partial<B2bDetails>) => void
@@ -135,8 +146,32 @@ export function B2bSaleForm({
                   placeholder="Search business by name, phone or GSTIN"
                   className={`${inputClass} pl-9 ${errors.customer ? 'border-[#DC2626]' : ''}`}
                 />
-                {customerOpen && customers.length > 0 ? (
-                  <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-48 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
+                {customerOpen && (customers.length > 0 || gstBusinesses.length > 0) ? (
+                  <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
+                    {gstBusinesses.length > 0 ? (
+                      <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#62789A]">
+                        GST directory
+                      </div>
+                    ) : null}
+                    {gstBusinesses.map((business) => (
+                      <button
+                        key={business.gstin}
+                        type="button"
+                        className="flex w-full flex-col px-3 py-2 text-left hover:bg-[#F5F9FF]"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => onSelectGstBusiness(business)}
+                      >
+                        <span className="text-[13px] font-medium text-[#031C45]">{business.name}</span>
+                        <span className="text-[11.5px] text-[#62789A]">
+                          {business.gstin} · {business.registrationType}
+                        </span>
+                      </button>
+                    ))}
+                    {customers.length > 0 ? (
+                      <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#62789A]">
+                        Saved customers
+                      </div>
+                    ) : null}
                     {customers.map((customer) => (
                       <button
                         key={customer.id}

@@ -33,6 +33,7 @@ const api = {
   updateCompany: (data: Record<string, unknown>) => invoke(IpcChannels.COMPANY_UPDATE, data),
   dashboardStats: () => invoke(IpcChannels.DASHBOARD_STATS),
   listCustomers: (opts?: Record<string, unknown>) => invoke(IpcChannels.CUSTOMERS_LIST, opts),
+  listGstBusinesses: () => invoke(IpcChannels.GST_BUSINESSES_LIST),
   getCustomer: (id: string) => invoke(IpcChannels.CUSTOMERS_GET, { id }),
   createCustomer: (data: Record<string, unknown>) => invoke(IpcChannels.CUSTOMERS_CREATE, data),
   updateCustomer: (data: Record<string, unknown>) => invoke(IpcChannels.CUSTOMERS_UPDATE, data),

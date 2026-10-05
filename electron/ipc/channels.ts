@@ -18,6 +18,7 @@ export const IpcChannels = {
   COMPANY_UPDATE: 'company:update',
   DASHBOARD_STATS: 'dashboard:stats',
   CUSTOMERS_LIST: 'customers:list',
+  GST_BUSINESSES_LIST: 'gst-businesses:list',
   CUSTOMERS_GET: 'customers:get',
   CUSTOMERS_CREATE: 'customers:create',
   CUSTOMERS_UPDATE: 'customers:update',

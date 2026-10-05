@@ -10,6 +10,7 @@
 
 import type * as accounts from "../accounts.js";
 import type * as catalog from "../catalog.js";
+import type * as gstBusinesses from "../gstBusinesses.js";
 import type * as products from "../products.js";
 
 import type {
@@ -21,6 +22,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
   catalog: typeof catalog;
+  gstBusinesses: typeof gstBusinesses;
   products: typeof products;
 }>;
 

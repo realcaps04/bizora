@@ -11,7 +11,7 @@ import {
   Settings,
   Trash2,
 } from 'lucide-react'
-import { B2bSaleForm } from '@/components/B2bSaleForm'
+import { B2bSaleForm, type GstBusinessOption } from '@/components/B2bSaleForm'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatMoney, joinAddress, parseAddress } from '@/utils'
@@ -28,6 +28,7 @@ import {
   type B2bDetails,
   type PaymentStatus,
 } from '@/data/b2b'
+import { GST_BUSINESSES } from '@/data/gstBusinesses'
 import { PRODUCT_UNITS, productUnit } from '@/data/units'
 import type { Customer, Product } from '@/types'
 
@@ -144,6 +145,8 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [newCustomerOpen, setNewCustomerOpen] = useState(false)
+  const [newNameOpen, setNewNameOpen] = useState(false)
+  const [gstBusinesses, setGstBusinesses] = useState<GstBusinessOption[]>(GST_BUSINESSES)
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     phone: '',
@@ -152,6 +155,32 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
     houseName: '',
     place: '',
   })
+
+  function matchGstBusinesses(query: string) {
+    const q = query.trim().toLowerCase()
+    const rows = q
+      ? gstBusinesses.filter(
+          (business) =>
+            business.name.toLowerCase().includes(q) ||
+            business.gstin.toLowerCase().includes(q) ||
+            business.address.toLowerCase().includes(q),
+        )
+      : gstBusinesses
+    return rows.slice(0, 8)
+  }
+
+  const filteredGstBusinesses = useMemo(
+    () => matchGstBusinesses(customerQuery),
+    // matchGstBusinesses closes over the loaded directory.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gstBusinesses, customerQuery],
+  )
+
+  const newCustomerMatches = useMemo(
+    () => matchGstBusinesses(newCustomer.name),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gstBusinesses, newCustomer.name],
+  )
 
   const filteredCustomers = useMemo(() => {
     const q = customerQuery.trim().toLowerCase()
@@ -167,6 +196,17 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   }, [customers, customerQuery])
 
   const selectedCustomer = customers.find((c) => c.id === customerId)
+
+  useEffect(() => {
+    void callApi(() => window.bizora.listGstBusinesses())
+      .then((rows) => {
+        const list = (rows as GstBusinessOption[]) || []
+        if (list.length) setGstBusinesses(list)
+      })
+      .catch(() => {
+        /* Keep the copy shipped with the app when Convex cannot be reached. */
+      })
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -338,6 +378,36 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   }, [invoiceDate, isB2B, b2b.paymentTerms])
 
   const balance = round2(Math.max(0, totals.grandTotal - paidAmount))
+
+  function selectGstBusiness(business: GstBusinessOption) {
+    setCustomerId('')
+    setCustomerQuery(business.name)
+    const parsed = parseAddress(business.address)
+    setHouseName(parsed.houseName)
+    setPlace(parsed.place)
+    setGstin(business.gstin)
+    const pan = business.gstin.slice(2, 12)
+    setB2b((prev) =>
+      applyCustomerProfile(prev, {
+        gstin: business.gstin,
+        address: business.address,
+        details: JSON.stringify({ pan, billingAddress: business.address }),
+      }),
+    )
+    setCustomerOpen(false)
+  }
+
+  function fillNewCustomerFromGst(business: GstBusinessOption) {
+    const parsed = parseAddress(business.address)
+    setNewCustomer((current) => ({
+      ...current,
+      name: business.name,
+      gstin: business.gstin,
+      houseName: parsed.houseName,
+      place: parsed.place,
+    }))
+    setNewNameOpen(false)
+  }
 
   function selectCustomer(c: Customer) {
     setCustomerId(c.id)
@@ -697,6 +767,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
             customerQuery={customerQuery}
             customerOpen={customerOpen}
             customers={filteredCustomers}
+            gstBusinesses={filteredGstBusinesses}
             onCustomerQuery={(value) => {
               setCustomerQuery(value)
               setCustomerOpen(true)
@@ -707,6 +778,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
               setTimeout(() => setCustomerOpen(false), 150)
             }}
             onSelectCustomer={selectCustomer}
+            onSelectGstBusiness={selectGstBusiness}
             onNewCustomer={() => setNewCustomerOpen(true)}
             value={b2b}
             onChange={(patch) => setB2b((prev) => ({ ...prev, ...patch }))}
@@ -1270,9 +1342,31 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
           <Field label="Name">
             <Input
               value={newCustomer.name}
-              onChange={(e) => setNewCustomer((f) => ({ ...f, name: e.target.value }))}
+              onChange={(e) => {
+                setNewCustomer((f) => ({ ...f, name: e.target.value }))
+                setNewNameOpen(true)
+              }}
+              onFocus={() => setNewNameOpen(true)}
+              placeholder="Search a GST business or type a name"
               autoFocus
             />
+            {newNameOpen && newCustomerMatches.length > 0 ? (
+              <div className="mt-1 max-h-40 overflow-auto rounded-md border border-[#D8E4F2] bg-white">
+                {newCustomerMatches.map((business) => (
+                  <button
+                    key={business.gstin}
+                    type="button"
+                    className="flex w-full flex-col px-3 py-2 text-left hover:bg-[#F5F9FF]"
+                    onClick={() => fillNewCustomerFromGst(business)}
+                  >
+                    <span className="text-[13px] font-medium text-[#031C45]">{business.name}</span>
+                    <span className="text-[11.5px] text-[#62789A]">
+                      {business.gstin} · {business.address}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </Field>
           <Field label="Phone">
             <Input

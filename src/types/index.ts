@@ -95,6 +95,7 @@ export interface BizoraApi {
   updateCompany: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   dashboardStats: () => Promise<ApiResult<unknown>>
   listCustomers: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
+  listGstBusinesses: () => Promise<ApiResult<unknown>>
   getCustomer: (id: string) => Promise<ApiResult<unknown>>
   createCustomer: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   updateCustomer: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>

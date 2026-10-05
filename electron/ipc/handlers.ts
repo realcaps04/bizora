@@ -1,8 +1,9 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { IpcChannels } from './channels'
-import { AppError, getSession, lockSession, unlockSession, shouldAutoLock } from '../security/session'
+import { AppError, getSession, lockSession, requireAuth, unlockSession, shouldAutoLock } from '../security/session'
 import * as auth from '../services/auth'
 import * as catalog from '../services/catalog'
+import { listGstBusinesses } from '../services/accountCloud'
 import * as starterCatalogs from '../services/starterCatalogs'
 import * as invoices from '../services/invoices'
 import * as operations from '../services/operations'
@@ -113,6 +114,10 @@ export function registerIpcHandlers(): void {
     },
     [IpcChannels.DASHBOARD_STATS]: () => reports.getDashboardStats(),
     [IpcChannels.CUSTOMERS_LIST]: (payload) => catalog.listCustomers((payload as object) || {}),
+    [IpcChannels.GST_BUSINESSES_LIST]: () => {
+      requireAuth()
+      return listGstBusinesses()
+    },
     [IpcChannels.CUSTOMERS_GET]: (payload) => catalog.getCustomer((payload as { id: string }).id),
     [IpcChannels.CUSTOMERS_CREATE]: (payload) => catalog.createCustomer(payload as Parameters<typeof catalog.createCustomer>[0]),
     [IpcChannels.CUSTOMERS_UPDATE]: (payload) => {

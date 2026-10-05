@@ -84,6 +84,17 @@ export default defineSchema({
   }).index('by_key', ['key']),
 
   /**
+   * Buyer GST registrations used when typing a B2B business name.
+   * Shared across installs, not a company's own customer list.
+   */
+  gstBusinesses: defineTable({
+    name: v.string(),
+    gstin: v.string(),
+    registrationType: v.string(),
+    address: v.string(),
+  }).index('by_gstin', ['gstin']),
+
+  /**
    * Shared products for those categories.
    * Written from the product files, then downloaded into the local app.
    * This is not a company's own stock.
