@@ -94,7 +94,7 @@ export function LoginPage() {
               onCreateCompany={() => navigate('/register')}
             />
           </div>
-          <div className="text-[12px] text-[#62789A]">Version 1.8.0</div>
+          <div className="text-[12px] text-[#62789A]">Version 1.8.1</div>
         </div>
       </section>
     </div>

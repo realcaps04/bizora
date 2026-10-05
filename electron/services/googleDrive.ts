@@ -68,9 +68,17 @@ function readOAuthConfig(): OAuthConfig {
   for (const file of files) {
     if ((clientId && clientSecret) || !existsSync(file)) continue
     try {
-      const parsed = JSON.parse(readFileSync(file, 'utf8')) as { clientId?: string; clientSecret?: string }
-      if (!clientId && parsed.clientId) clientId = String(parsed.clientId).trim()
-      if (!clientSecret && parsed.clientSecret) clientSecret = String(parsed.clientSecret).trim()
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
+        clientId?: string
+        clientSecret?: string
+        client_id?: string
+        client_secret?: string
+        installed?: { client_id?: string; client_secret?: string }
+        web?: { client_id?: string; client_secret?: string }
+      }
+      const nested = parsed.installed || parsed.web
+      if (!clientId) clientId = String(parsed.clientId || parsed.client_id || nested?.client_id || '').trim()
+      if (!clientSecret) clientSecret = String(parsed.clientSecret || parsed.client_secret || nested?.client_secret || '').trim()
     } catch {
       /* ignore a broken local config */
     }
