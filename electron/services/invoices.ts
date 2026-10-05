@@ -76,6 +76,8 @@ export function listInvoices(opts: {
   if (opts.status) {
     where += ' AND i.status = ?'
     params.push(opts.status)
+  } else {
+    where += ` AND i.status != 'cancelled'`
   }
   if (opts.paymentStatus) {
     where += ' AND i.payment_status = ?'
@@ -579,43 +581,96 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
   return getInvoice(id)
 }
 
-export function cancelInvoice(id: string) {
-  const user = requirePermission('invoices.cancel')
-  const invoice = queryOne<Record<string, unknown>>('SELECT * FROM invoices WHERE id = ? AND company_id = ?', [id, user.companyId])
-  if (!invoice) throw new AppError('Invoice not found.', 'NOT_FOUND')
-  if (invoice.status === 'cancelled') throw new AppError('Invoice is already cancelled.', 'VALIDATION')
+function adjustStock(companyId: string, productId: string, qty: number, ts: string) {
+  run('UPDATE products SET current_stock = current_stock + ?, updated_at = ? WHERE id = ? AND company_id = ?', [
+    qty,
+    ts,
+    productId,
+    companyId,
+  ])
+}
 
+/** Remove an invoice and every record that still points at it. */
+function eraseInvoice(companyId: string, id: string, restoreSaleStock: boolean): string[] {
   const ts = now()
-  withTransaction(() => {
+  const productIds = new Set<string>()
+  const saleReturns = queryAll<{ id: string }>(
+    `SELECT id FROM returns WHERE company_id = ? AND kind = 'sale' AND source_id = ?`,
+    [companyId, id],
+  )
+  for (const entry of saleReturns) {
+    const lines = queryAll<{ product_id: string | null; qty: number }>(
+      'SELECT product_id, qty FROM return_items WHERE return_id = ? AND company_id = ?',
+      [entry.id, companyId],
+    )
+    for (const line of lines) {
+      if (!line.product_id) continue
+      adjustStock(companyId, line.product_id, -Number(line.qty || 0), ts)
+      productIds.add(line.product_id)
+    }
+    run(`DELETE FROM stock_movements WHERE company_id = ? AND reference_type = 'return' AND reference_id = ?`, [
+      companyId,
+      entry.id,
+    ])
+    run('DELETE FROM audit_logs WHERE company_id = ? AND record_id = ?', [companyId, entry.id])
+    run('DELETE FROM return_items WHERE return_id = ? AND company_id = ?', [entry.id, companyId])
+    run('DELETE FROM returns WHERE id = ? AND company_id = ?', [entry.id, companyId])
+  }
+
+  if (restoreSaleStock) {
     const items = queryAll<{ product_id: string | null; qty: number }>(
       'SELECT product_id, qty FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
-      [id, user.companyId],
+      [id, companyId],
     )
     for (const item of items) {
       if (!item.product_id) continue
-      run('UPDATE products SET current_stock = current_stock + ?, updated_at = ? WHERE id = ? AND company_id = ?', [
-        item.qty,
-        ts,
-        item.product_id,
-        user.companyId,
-      ])
-      run(
-        `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, reference_id, notes, created_by, created_at)
-         VALUES (?, ?, ?, 'sale_cancel', ?, 'invoice', ?, 'Invoice cancelled', ?, ?)`,
-        [generateId(), user.companyId, item.product_id, item.qty, id, user.id, ts],
-      )
+      adjustStock(companyId, item.product_id, Number(item.qty || 0), ts)
+      productIds.add(item.product_id)
     }
-    run(`UPDATE invoices SET status = 'cancelled', updated_at = ? WHERE id = ? AND company_id = ?`, [ts, id, user.companyId])
-    writeAudit(user.companyId, user, 'invoice.cancelled', 'invoices', id, `Invoice ${invoice.invoice_number} cancelled`)
-  })
-  const changed = queryAll<{ product_id: string | null }>(
-    'SELECT product_id FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
-    [id, user.companyId],
-  )
-  for (const item of changed) {
-    if (item.product_id) syncProductById(item.product_id)
   }
-  return getInvoice(id)
+
+  const payments = queryAll<{ id: string }>('SELECT id FROM payments WHERE invoice_id = ? AND company_id = ?', [id, companyId])
+  for (const payment of payments) {
+    run('DELETE FROM audit_logs WHERE company_id = ? AND record_id = ?', [companyId, payment.id])
+  }
+  run('DELETE FROM payments WHERE invoice_id = ? AND company_id = ?', [id, companyId])
+  run(`DELETE FROM stock_movements WHERE company_id = ? AND reference_type = 'invoice' AND reference_id = ?`, [
+    companyId,
+    id,
+  ])
+  run('DELETE FROM invoice_items WHERE invoice_id = ? AND company_id = ?', [id, companyId])
+  run('DELETE FROM audit_logs WHERE company_id = ? AND record_id = ?', [companyId, id])
+  run('DELETE FROM invoices WHERE id = ? AND company_id = ?', [id, companyId])
+  return [...productIds]
+}
+
+export function cancelInvoice(id: string) {
+  const user = requirePermission('invoices.cancel')
+  const invoice = queryOne<Record<string, unknown>>('SELECT status FROM invoices WHERE id = ? AND company_id = ?', [
+    id,
+    user.companyId,
+  ])
+  if (!invoice) throw new AppError('Invoice not found.', 'NOT_FOUND')
+
+  const productIds = withTransaction(() => eraseInvoice(user.companyId, id, invoice.status !== 'cancelled'))
+  for (const productId of productIds) syncProductById(productId)
+  return { removed: true }
+}
+
+/** Drop invoices that were only marked cancelled, including their items, payments, and returns. */
+export function purgeCancelledInvoices(): void {
+  const rows = queryAll<{ id: string; company_id: string }>(
+    `SELECT id, company_id FROM invoices WHERE status = 'cancelled'`,
+  )
+  if (!rows.length) return
+  const productIds = withTransaction(() => {
+    const touched = new Set<string>()
+    for (const row of rows) {
+      for (const productId of eraseInvoice(row.company_id, row.id, false)) touched.add(productId)
+    }
+    return [...touched]
+  })
+  for (const productId of productIds) syncProductById(productId)
 }
 
 export function createPayment(input: {

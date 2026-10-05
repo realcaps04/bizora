@@ -41,7 +41,7 @@ export function getDashboardStats() {
 
   const recentInvoices = queryAll(
     `SELECT id, invoice_number, customer_name, invoice_date, grand_total, payment_status, status
-     FROM invoices WHERE company_id = ? ORDER BY created_at DESC LIMIT 8`,
+     FROM invoices WHERE company_id = ? AND status != 'cancelled' ORDER BY created_at DESC LIMIT 8`,
     [cid],
   )
 

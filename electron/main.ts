@@ -3,6 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { initDatabase, closeDatabase, persistNow } from './database'
+import { ensureDefaultProductsForAllCompanies } from './services/starterCatalogs'
+import { purgeCancelledInvoices } from './services/invoices'
 import { registerIpcHandlers } from './ipc/handlers'
 import { startAutomaticBackups } from './services/backupSchedule'
 import { shouldAutoLock, lockSession, restoreSession } from './security/session'
@@ -104,6 +106,16 @@ function boot(): void {
     try {
       await initDatabase()
       restoreSession()
+      try {
+        ensureDefaultProductsForAllCompanies()
+      } catch (error) {
+        console.error('[Bizora] Default products were not loaded:', error)
+      }
+      try {
+        purgeCancelledInvoices()
+      } catch (error) {
+        console.error('[Bizora] Cancelled invoices were not removed:', error)
+      }
       registerIpcHandlers()
       startAutomaticBackups()
       createWindow()

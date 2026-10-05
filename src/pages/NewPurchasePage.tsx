@@ -119,6 +119,7 @@ export function NewPurchasePage() {
   const [paidTouched, setPaidTouched] = useState(false)
   const [items, setItems] = useState<LineItem[]>(() => Array.from({ length: 2 }, () => emptyLine()))
   const [productQuery, setProductQuery] = useState('')
+  const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productResults, setProductResults] = useState<Product[]>([])
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -188,7 +189,8 @@ export function NewPurchasePage() {
   }, [])
 
   useEffect(() => {
-    if (!productQuery.trim()) {
+    const showDefaults = Boolean(activeRowKey || productSearchOpen)
+    if (!productQuery.trim() && !showDefaults) {
       setProductResults([])
       return
     }
@@ -196,12 +198,12 @@ export function NewPurchasePage() {
       void callApi(() => window.bizora.searchProducts(productQuery)).then((rows) =>
         setProductResults(rows as Product[]),
       )
-    }, 150)
+    }, productQuery.trim() ? 150 : 0)
     return () => clearTimeout(t)
-  }, [productQuery])
+  }, [productQuery, activeRowKey, productSearchOpen])
 
   useEffect(() => {
-    const headerOpen = Boolean(productQuery.trim() && !activeRowKey && productResults.length)
+    const headerOpen = Boolean(productSearchOpen && !activeRowKey && productResults.length)
     const rowOpen = Boolean(activeRowKey && productResults.length)
     if (!headerOpen && !rowOpen) {
       setProductMenu(null)
@@ -215,7 +217,7 @@ export function NewPurchasePage() {
       window.removeEventListener('scroll', onMove, true)
       window.removeEventListener('resize', onMove)
     }
-  }, [activeRowKey, productResults, productQuery])
+  }, [activeRowKey, productResults, productQuery, productSearchOpen])
 
   const filledItems = useMemo(
     () => items.filter((i) => i.productName.trim() && i.productId && i.qty > 0),
@@ -596,13 +598,16 @@ export function NewPurchasePage() {
                     productAnchor.current = e.currentTarget
                     setProductQuery(e.target.value)
                     setActiveRowKey(null)
+                    setProductSearchOpen(true)
                     placeProductMenu(e.currentTarget)
                   }}
                   onFocus={(e) => {
                     productAnchor.current = e.currentTarget
                     setActiveRowKey(null)
-                    if (productQuery.trim()) placeProductMenu(e.currentTarget)
+                    setProductSearchOpen(true)
+                    placeProductMenu(e.currentTarget)
                   }}
+                  onBlur={() => setTimeout(() => setProductSearchOpen(false), 150)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && productResults[0]) {
                       e.preventDefault()
@@ -610,7 +615,7 @@ export function NewPurchasePage() {
                     }
                   }}
                   placeholder="Search product"
-                  className="h-9 w-[220px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
+                  className="h-9 w-[280px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                 />
               </div>
               <Button type="button" onClick={() => setItems((prev) => [...prev, emptyLine()])}>
@@ -653,8 +658,9 @@ export function NewPurchasePage() {
                           }}
                           onFocus={(e) => {
                             productAnchor.current = e.currentTarget
+                            setProductSearchOpen(false)
                             setActiveRowKey(item.key)
-                            if (item.productName) setProductQuery(item.productName)
+                            setProductQuery(item.productName)
                             placeProductMenu(e.currentTarget)
                           }}
                           placeholder="Type or search product..."

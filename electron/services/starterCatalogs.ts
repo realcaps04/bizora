@@ -1,7 +1,9 @@
-﻿import { existsSync, readFileSync } from 'node:fs'
+﻿import { app } from 'electron'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { COMPANY_CATEGORIES } from '../../src/data/companyCategories'
-import { getDb, queryAll, withTransaction } from '../database'
+import { getDb, getMeta, queryAll, setMeta, withTransaction } from '../database'
 import { generateId } from '../security/crypto'
 import { AppError, requirePermission } from '../security/session'
 import { listCatalogCategories, listCatalogItems, listCatalogPage } from './accountCloud'
@@ -24,9 +26,19 @@ const CATALOG_FILES: Record<string, string> = {
   restaurants: 'restaurant_food_service_pos_inventory.csv',
   cafes: 'cafe_bakery_pos_inventory.csv',
   software: 'software_development_it_pos_inventory.csv',
+  'it-support': 'it_support_cybersecurity_pos_inventory.csv',
   ecommerce: 'ecommerce_online_retail_pos_inventory.csv',
+  'auto-repair': 'automotive_repair_maintenance_pos_inventory.csv',
   accounting: 'accounting_tax_consultancy_pos_inventory.csv',
+  'skilled-trades': 'kerala_plumbing_master_catalog_10000.csv',
 }
+
+/** Bump when Product_list changes so existing companies pick up new rows. */
+const DEFAULT_PRODUCTS_VERSION = 'product-list-2'
+
+const EXTRA_DEFAULT_FILES: Array<{ file: string; companyCategory: string }> = [
+  { file: 'silpolin_tarpaulin_sheets_catalog.csv', companyCategory: 'Specialty Manufacturing' },
+]
 
 /** Company types shown on Bulk add. Add a CSV in public/ and set `CATALOG_FILES` when a file is ready. */
 export const STARTER_CATALOGS: StarterCatalog[] = COMPANY_CATEGORIES.map((category) => ({
@@ -49,12 +61,93 @@ interface CatalogRow {
 const countCache = new Map<string, number>()
 
 function catalogFile(fileName: string): string | null {
-  const candidates = [
-    process.env.VITE_PUBLIC ? path.join(process.env.VITE_PUBLIC, fileName) : '',
-    path.join(process.cwd(), 'public', fileName),
-    path.join(process.cwd(), 'dist', fileName),
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const roots = [
+    process.env.VITE_PUBLIC || '',
+    path.join(process.cwd(), 'public'),
+    path.join(process.cwd(), 'dist'),
+    path.join(here, '../public'),
+    path.join(here, '../dist'),
+    app.isReady() ? path.join(app.getAppPath(), 'public') : '',
+    app.isReady() ? path.join(app.getAppPath(), 'dist') : '',
   ].filter(Boolean)
+  const candidates = roots.flatMap((root) => [
+    path.join(root, 'Product_list', fileName),
+    path.join(root, fileName),
+  ])
   return candidates.find((file) => existsSync(file)) ?? null
+}
+
+function defaultProductSources(): Array<{ file: string; companyCategory: string }> {
+  const fromCategories = COMPANY_CATEGORIES.flatMap((category) => {
+    const file = CATALOG_FILES[category.id]
+    return file ? [{ file, companyCategory: category.name }] : []
+  })
+  return [...fromCategories, ...EXTRA_DEFAULT_FILES]
+}
+
+/** Insert every bundled Product_list row that this company does not already have. */
+export function ensureDefaultProducts(companyId: string): number {
+  const key = `default_products:${companyId}`
+  if (getMeta(key) === DEFAULT_PRODUCTS_VERSION) return 0
+  const sources = defaultProductSources()
+  if (!sources.some((source) => catalogFile(source.file))) return 0
+
+  const existing = queryAll<{ name: string; sku: string | null }>(
+    `SELECT name, sku FROM products WHERE company_id = ? AND status != 'deleted'`,
+    [companyId],
+  )
+  const have = new Set(existing.map((row) => `${row.name.trim().toLowerCase()}|${(row.sku || '').trim().toLowerCase()}`))
+  const ts = new Date().toISOString()
+  const db = getDb()
+  const stmt = db.prepare(
+    `INSERT INTO products (
+      id, company_id, name, sku, barcode, hsn, category, company_category,
+      purchase_rate, selling_rate, tax_rate, opening_stock, current_stock, min_stock,
+      brand, mrp, reorder_level, location, description, supplier, product_type, unit,
+      status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NULL, 0, 0, NULL, NULL, NULL, NULL, 'Pcs', 'active', ?, ?)`,
+  )
+  let count = 0
+  let parsed = 0
+  try {
+    withTransaction(() => {
+      for (const source of sources) {
+        const rows = readCatalogRows(source.file)
+        parsed += rows.length
+        for (const row of rows) {
+          const identity = `${row.name.toLowerCase()}|${row.sku.toLowerCase()}`
+          if (have.has(identity)) continue
+          have.add(identity)
+          stmt.run([
+            generateId(),
+            companyId,
+            row.name,
+            row.sku || null,
+            row.barcode || null,
+            row.hsn || null,
+            row.category || null,
+            source.companyCategory,
+            row.purchaseRate,
+            row.sellingRate,
+            row.taxRate,
+            ts,
+            ts,
+          ])
+          count += 1
+        }
+      }
+    })
+  } finally {
+    stmt.free()
+  }
+  if (parsed > 0 && sources.every((source) => catalogFile(source.file))) setMeta(key, DEFAULT_PRODUCTS_VERSION)
+  return count
+}
+
+export function ensureDefaultProductsForAllCompanies(): void {
+  const companies = queryAll<{ id: string }>('SELECT id FROM companies')
+  for (const company of companies) ensureDefaultProducts(company.id)
 }
 
 function splitCsvLine(line: string): string[] {

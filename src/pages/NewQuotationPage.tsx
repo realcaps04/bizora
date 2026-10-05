@@ -147,6 +147,7 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
   const [remarks, setRemarks] = useState('')
   const [items, setItems] = useState<LineItem[]>(() => Array.from({ length: 2 }, () => emptyLine()))
   const [productQuery, setProductQuery] = useState('')
+  const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productResults, setProductResults] = useState<Product[]>([])
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -264,7 +265,8 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
   }, [staff, pendingSalesPerson])
 
   useEffect(() => {
-    if (!productQuery.trim()) {
+    const showDefaults = Boolean(activeRowKey || productSearchOpen)
+    if (!productQuery.trim() && !showDefaults) {
       setProductResults([])
       return
     }
@@ -272,13 +274,13 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
       void callApi(() => window.bizora.searchProducts(productQuery)).then((rows) =>
         setProductResults(rows as Product[]),
       )
-    }, 150)
+    }, productQuery.trim() ? 150 : 0)
     return () => clearTimeout(t)
-  }, [productQuery])
+  }, [productQuery, activeRowKey, productSearchOpen])
 
   useEffect(() => {
     const showRow = Boolean(activeRowKey && productResults.length > 0)
-    const showSearch = Boolean(!activeRowKey && productQuery.trim() && productResults.length > 0)
+    const showSearch = Boolean(!activeRowKey && productSearchOpen && productResults.length > 0)
     if (!showRow && !showSearch) {
       setProductMenu(null)
       return
@@ -292,7 +294,7 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
       window.removeEventListener('scroll', onMove, true)
       window.removeEventListener('resize', onMove)
     }
-  }, [activeRowKey, productResults, productQuery])
+  }, [activeRowKey, productResults, productQuery, productSearchOpen])
 
   const filledItems = useMemo(
     () => items.filter((i) => i.productName.trim() && i.qty > 0),
@@ -702,15 +704,17 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
                   onChange={(e) => {
                     setProductQuery(e.target.value)
                     setActiveRowKey(null)
+                    setProductSearchOpen(true)
                     productAnchor.current = e.currentTarget
                     placeProductMenu(e.currentTarget)
                   }}
                   onFocus={(e) => {
-                    if (!activeRowKey) {
-                      productAnchor.current = e.currentTarget
-                      placeProductMenu(e.currentTarget)
-                    }
+                    setActiveRowKey(null)
+                    setProductSearchOpen(true)
+                    productAnchor.current = e.currentTarget
+                    placeProductMenu(e.currentTarget)
                   }}
+                  onBlur={() => setTimeout(() => setProductSearchOpen(false), 150)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && productResults[0]) {
                       e.preventDefault()
@@ -718,7 +722,7 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
                     }
                   }}
                   placeholder="Search product (name, code or HSN)"
-                  className="h-9 w-[260px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
+                  className="h-9 w-[280px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                 />
               </div>
               <Button type="button" onClick={addBlankRow}>
@@ -760,10 +764,11 @@ export function NewQuotationPage({ quotationId }: { quotationId?: string } = {})
                             placeProductMenu(e.currentTarget)
                           }}
                           onFocus={(e) => {
+                            setProductSearchOpen(false)
                             setActiveRowKey(item.key)
+                            setProductQuery(item.productName)
                             productAnchor.current = e.currentTarget
                             placeProductMenu(e.currentTarget)
-                            if (item.productName) setProductQuery(item.productName)
                           }}
                           placeholder="Type or search product..."
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"

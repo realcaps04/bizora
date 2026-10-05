@@ -86,7 +86,7 @@ export function getCustomer(id: string) {
   if (!customer) throw new AppError('Customer not found.', 'NOT_FOUND')
   const invoices = queryAll(
     `SELECT id, invoice_number, invoice_date, grand_total, payment_status, status
-     FROM invoices WHERE customer_id = ? AND company_id = ? ORDER BY invoice_date DESC LIMIT 50`,
+     FROM invoices WHERE customer_id = ? AND company_id = ? AND status != 'cancelled' ORDER BY invoice_date DESC LIMIT 50`,
     [id, cid],
   )
   const payments = queryAll(
@@ -300,7 +300,15 @@ export function listProducts(opts: {
 export function searchProducts(q: string) {
   const cid = companyId()
   const term = q.trim()
-  if (!term) return []
+  if (!term) {
+    return queryAll(
+      `SELECT * FROM products
+       WHERE company_id = ? AND status = 'active'
+       ORDER BY name
+       LIMIT 30`,
+      [cid],
+    )
+  }
   return queryAll(
     `SELECT * FROM products
      WHERE company_id = ? AND status = 'active'

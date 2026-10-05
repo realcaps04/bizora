@@ -129,6 +129,7 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   const [paidTouched, setPaidTouched] = useState(false)
   const [items, setItems] = useState<LineItem[]>(() => Array.from({ length: 2 }, () => emptyLine()))
   const [productQuery, setProductQuery] = useState('')
+  const [productSearchOpen, setProductSearchOpen] = useState(false)
   const [productResults, setProductResults] = useState<Product[]>([])
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null)
   const productAnchor = useRef<HTMLInputElement | null>(null)
@@ -291,7 +292,8 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
   }, [invoiceId, navigate, showToast])
 
   useEffect(() => {
-    if (!productQuery.trim()) {
+    const showDefaults = Boolean(activeRowKey || productSearchOpen)
+    if (!productQuery.trim() && !showDefaults) {
       setProductResults([])
       return
     }
@@ -299,9 +301,9 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
       void callApi(() => window.bizora.searchProducts(productQuery)).then((rows) =>
         setProductResults(rows as Product[]),
       )
-    }, 150)
+    }, productQuery.trim() ? 150 : 0)
     return () => clearTimeout(t)
-  }, [productQuery])
+  }, [productQuery, activeRowKey, productSearchOpen])
 
   useEffect(() => {
     if (!activeRowKey || productResults.length === 0) {
@@ -890,7 +892,13 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                   onChange={(e) => {
                     setProductQuery(e.target.value)
                     setActiveRowKey(null)
+                    setProductSearchOpen(true)
                   }}
+                  onFocus={() => {
+                    setActiveRowKey(null)
+                    setProductSearchOpen(true)
+                  }}
+                  onBlur={() => setTimeout(() => setProductSearchOpen(false), 150)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && productResults[0]) {
                       e.preventDefault()
@@ -898,15 +906,16 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                     }
                   }}
                   placeholder="Search by name, code or HSN"
-                  className="h-9 w-[240px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
+                  className="h-9 w-[280px] rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                 />
-                {productQuery && !activeRowKey && productResults.length > 0 ? (
-                  <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-[320px] max-h-52 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
+                {productSearchOpen && !activeRowKey && productResults.length > 0 ? (
+                  <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-[440px] max-h-64 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
                     {productResults.map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-[#F5F9FF]"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => addProductFromSearch(p)}
                       >
                         <span>
@@ -966,10 +975,11 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                             placeProductMenu(e.currentTarget)
                           }}
                           onFocus={(e) => {
+                            setProductSearchOpen(false)
                             setActiveRowKey(item.key)
+                            setProductQuery(item.productName)
                             productAnchor.current = e.currentTarget
                             placeProductMenu(e.currentTarget)
-                            if (item.productName) setProductQuery(item.productName)
                           }}
                           placeholder="Type or search product..."
                           className="h-8 w-full rounded border border-[#D8E4F2] px-2 text-[13px] outline-none focus:border-[#0878F9]"

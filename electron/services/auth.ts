@@ -189,6 +189,8 @@ export async function registerCompany(input: {
     }
   }
   setSessionUser(user, true)
+  const { ensureDefaultProducts } = await import('./starterCatalogs')
+  ensureDefaultProducts(companyId)
   return user
 }
 

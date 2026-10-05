@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Ban, X } from 'lucide-react'
+import { Ban, FileSpreadsheet, FileText, Pencil, Trash2, X } from 'lucide-react'
 import { Badge, Button, EmptyState, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
 import { DocumentPrint, termsFromSetting } from '@/components/DocumentPrint'
 import { parseB2b, parseLineExtra } from '@/data/b2b'
@@ -52,7 +52,7 @@ export function SalesPage() {
       ) : rows.length === 0 ? (
         <EmptyState title="No sales yet" action={<Link to="/sales/new"><Button>Create Sale</Button></Link>} />
       ) : (
-        <InvoiceTable rows={rows} />
+        <InvoiceTable rows={rows} onRemoved={(id) => setRows((current) => current.filter((row) => row.id !== id))} />
       )}
     </div>
   )
@@ -91,8 +91,7 @@ export function InvoicesPage() {
       setLoading(true)
       try {
         const opts: Record<string, unknown> = { search, pageSize: 100 }
-        if (tab === 'cancelled') opts.status = 'cancelled'
-        else if (tab !== 'all') opts.paymentStatus = tab === 'partially' ? 'partial' : tab
+        if (tab !== 'all') opts.paymentStatus = tab === 'partially' ? 'partial' : tab
         const data = await callApi(() => window.bizora.listInvoices(opts))
         setRows((data as { rows: Invoice[] }).rows)
       } finally {
@@ -170,7 +169,6 @@ export function InvoicesPage() {
     { id: 'paid', label: 'Paid' },
     { id: 'unpaid', label: 'Unpaid' },
     { id: 'partially', label: 'Partially Paid' },
-    { id: 'cancelled', label: 'Cancelled' },
   ]
 
   return (
@@ -218,12 +216,53 @@ export function InvoicesPage() {
           {exporting === 'name-excel' ? 'Preparing…' : 'Name Excel'}
         </Button>
       </div>
-      {loading ? <Spinner /> : rows.length === 0 ? <EmptyState title="No invoices found" /> : <InvoiceTable rows={rows} downloads />}
+      {loading ? <Spinner /> : rows.length === 0 ? <EmptyState title="No invoices found" /> : (
+        <InvoiceTable
+          rows={rows}
+          downloads
+          onRemoved={(id) => setRows((current) => current.filter((row) => row.id !== id))}
+        />
+      )}
     </div>
   )
 }
 
-function InvoiceTable({ rows, downloads = false }: { rows: Invoice[]; downloads?: boolean }) {
+function RowIcon({
+  label,
+  className,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string
+  className: string
+  disabled?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-40 ${className}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function InvoiceTable({
+  rows,
+  downloads = false,
+  onRemoved,
+}: {
+  rows: Invoice[]
+  downloads?: boolean
+  onRemoved?: (id: string) => void
+}) {
   const { showToast } = useAppStore()
   const [busyId, setBusyId] = useState('')
 
@@ -239,6 +278,26 @@ function InvoiceTable({ rows, downloads = false }: { rows: Invoice[]; downloads?
       else downloadOneInvoiceExcel(data.invoice, data.items, `${file}.xls`)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Unable to download this invoice', 'error')
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  async function removeInvoice(invoice: Invoice) {
+    if (
+      !confirm(
+        `Remove ${invoice.invoice_number}? Its items, payments, and sales returns will be deleted, and stock from this sale will be put back.`,
+      )
+    ) {
+      return
+    }
+    setBusyId(`${invoice.id}:delete`)
+    try {
+      await callApi(() => window.bizora.cancelInvoice(invoice.id))
+      showToast('Invoice removed', 'success')
+      onRemoved?.(invoice.id)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to remove this invoice', 'error')
     } finally {
       setBusyId('')
     }
@@ -278,30 +337,41 @@ function InvoiceTable({ rows, downloads = false }: { rows: Invoice[]; downloads?
               </td>
               <td className="px-4 py-2.5">{inv.created_by_name || '—'}</td>
               <td className="px-4 py-2.5">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1">
                   {downloads ? (
-                    <Select
-                      className="h-7 w-[118px] text-xs"
-                      value=""
-                      disabled={busyId.startsWith(`${inv.id}:`)}
-                      onChange={(e) => {
-                        const format = e.target.value as 'pdf' | 'excel' | ''
-                        if (format === 'pdf' || format === 'excel') void downloadOne(inv, format)
-                      }}
-                    >
-                      <option value="">{busyId.startsWith(`${inv.id}:`) ? 'Preparing…' : 'Download'}</option>
-                      <option value="pdf">PDF</option>
-                      <option value="excel">Excel</option>
-                    </Select>
+                    <>
+                      <RowIcon
+                        label={`Download ${inv.invoice_number} as PDF`}
+                        disabled={busyId.startsWith(`${inv.id}:`)}
+                        className="bg-[#FEF2F2] text-[#DC2626] hover:bg-[#FEE2E2]"
+                        onClick={() => void downloadOne(inv, 'pdf')}
+                      >
+                        <FileText size={15} />
+                      </RowIcon>
+                      <RowIcon
+                        label={`Download ${inv.invoice_number} as Excel`}
+                        disabled={busyId.startsWith(`${inv.id}:`)}
+                        className="bg-[#F0FDF4] text-[#16A34A] hover:bg-[#DCFCE7]"
+                        onClick={() => void downloadOne(inv, 'excel')}
+                      >
+                        <FileSpreadsheet size={15} />
+                      </RowIcon>
+                    </>
                   ) : null}
-                  {inv.status === 'cancelled' ? (
-                    downloads ? null : '—'
-                  ) : (
-                    <Link to={`/invoices/${inv.id}/edit`}>
-                      <Button size="sm" variant="outline">
-                        Edit
-                      </Button>
-                    </Link>
+                  {inv.status === 'cancelled' ? null : (
+                    <>
+                      <Link to={`/invoices/${inv.id}/edit`} title="Edit" aria-label={`Edit ${inv.invoice_number}`} className="flex h-8 w-8 items-center justify-center rounded-md bg-[#EFF6FF] text-[#0878F9] hover:bg-[#DBEAFE]">
+                        <Pencil size={15} />
+                      </Link>
+                      <RowIcon
+                        label={`Delete ${inv.invoice_number}`}
+                        disabled={busyId.startsWith(`${inv.id}:`)}
+                        className="bg-[#FEF2F2] text-[#DC2626] hover:bg-[#FEE2E2]"
+                        onClick={() => void removeInvoice(inv)}
+                      >
+                        <Trash2 size={15} />
+                      </RowIcon>
+                    </>
                   )}
                 </div>
               </td>
@@ -353,10 +423,9 @@ export function InvoiceDetailPage() {
     setCancelling(true)
     try {
       await callApi(() => window.bizora.cancelInvoice(id))
-      showToast('Invoice cancelled', 'success')
-      const d = await callApi(() => window.bizora.getInvoice(id))
-      setData(d as never)
+      showToast('Invoice removed', 'success')
       setCancelOpen(false)
+      navigate('/invoices')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Unable to cancel invoice', 'error')
     } finally {
@@ -402,7 +471,7 @@ export function InvoiceDetailPage() {
           ) : null}
           {invoice.status !== 'cancelled' ? (
             <Button variant="danger" onClick={() => setCancelOpen(true)}>
-              Cancel Invoice
+              Delete invoice
             </Button>
           ) : null}
         </div>
@@ -480,10 +549,10 @@ export function InvoiceDetailPage() {
               </div>
               <div className="min-w-0 flex-1 pt-0.5">
                 <h2 id="cancel-invoice-title" className="text-[15px] font-semibold tracking-tight text-[#031C45]">
-                  Cancel invoice?
+                  Remove invoice?
                 </h2>
                 <p className="mt-1 text-[13px] leading-relaxed text-[#62789A]">
-                  The invoice will remain in audit history and stock will be restored.
+                  The invoice, its items, payments, and sales returns are deleted from invoices, sales, payments, and reports. Stock from this sale is put back.
                 </p>
               </div>
               <button
@@ -501,7 +570,7 @@ export function InvoiceDetailPage() {
                 Keep invoice
               </Button>
               <Button variant="danger" disabled={cancelling} onClick={() => void cancel()}>
-                {cancelling ? 'Cancelling…' : 'Cancel invoice'}
+                {cancelling ? 'Removing…' : 'Remove invoice'}
               </Button>
             </div>
           </div>
