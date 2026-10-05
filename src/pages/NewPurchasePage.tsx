@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, FileText, Plus, Printer, Search, Settings, Trash2, Truck } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
+import { GST_BUSINESSES, type GstBusinessRecord } from '@/data/gstBusinesses'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatMoney, joinAddress, parseAddress } from '@/utils'
 import type { Product } from '@/types'
@@ -105,6 +106,8 @@ export function NewPurchasePage() {
   const [purchaseNumber, setPurchaseNumber] = useState('…')
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
   const [suppliers, setSuppliers] = useState<SupplierOption[]>(() => loadSavedSuppliers())
+  const [gstBusinesses, setGstBusinesses] = useState<GstBusinessRecord[]>(GST_BUSINESSES)
+  const [newNameOpen, setNewNameOpen] = useState(false)
   const [supplierName, setSupplierName] = useState('')
   const [supplierOpen, setSupplierOpen] = useState(false)
   const [houseName, setHouseName] = useState('')
@@ -127,6 +130,30 @@ export function NewPurchasePage() {
     houseName: '',
     place: '',
   })
+
+  function matchGstBusinesses(query: string) {
+    const q = query.trim().toLowerCase()
+    const rows = q
+      ? gstBusinesses.filter(
+          (business) =>
+            business.name.toLowerCase().includes(q) ||
+            business.gstin.toLowerCase().includes(q) ||
+            business.address.toLowerCase().includes(q),
+        )
+      : gstBusinesses
+    return rows.slice(0, 8)
+  }
+
+  const filteredGstBusinesses = useMemo(
+    () => matchGstBusinesses(supplierName),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gstBusinesses, supplierName],
+  )
+  const newSupplierMatches = useMemo(
+    () => matchGstBusinesses(newSupplier.name),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gstBusinesses, newSupplier.name],
+  )
 
   const filteredSuppliers = useMemo(() => {
     const q = supplierName.trim().toLowerCase()
@@ -151,6 +178,12 @@ export function NewPurchasePage() {
         if (!merged.some((m) => m.name.toLowerCase() === s.name.toLowerCase())) merged.push(s)
       }
       setSuppliers(merged)
+      try {
+        const directory = (await callApi(() => window.bizora.listGstBusinesses())) as GstBusinessRecord[]
+        if (directory.length) setGstBusinesses(directory)
+      } catch {
+        /* The copy shipped with the app stays available. */
+      }
     })()
   }, [])
 
@@ -218,6 +251,29 @@ export function NewPurchasePage() {
   }, [totals.grandTotal, paidTouched])
 
   const balance = round2(Math.max(0, totals.grandTotal - paidAmount))
+
+  function selectGstBusiness(business: GstBusinessRecord) {
+    const parsed = parseAddress(business.address)
+    selectSupplier({
+      name: business.name,
+      gstin: business.gstin,
+      houseName: parsed.houseName,
+      place: parsed.place,
+      address: business.address,
+    })
+  }
+
+  function fillNewSupplierFromGst(business: GstBusinessRecord) {
+    const parsed = parseAddress(business.address)
+    setNewSupplier((current) => ({
+      ...current,
+      name: business.name,
+      gstin: business.gstin,
+      houseName: parsed.houseName,
+      place: parsed.place,
+    }))
+    setNewNameOpen(false)
+  }
 
   function selectSupplier(s: SupplierOption) {
     setSupplierName(s.name)
@@ -440,8 +496,33 @@ export function NewPurchasePage() {
                       placeholder="Search supplier by name"
                       className="h-9 w-full rounded-md border border-[#D8E4F2] bg-white py-1.5 pl-9 pr-3 text-[13px] text-[#031C45] outline-none placeholder:text-[#94A3B8] focus:border-[#0878F9] focus:ring-2 focus:ring-[#0878F9]/15"
                     />
-                    {supplierOpen && filteredSuppliers.length > 0 ? (
-                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-48 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
+                    {supplierOpen && (filteredGstBusinesses.length > 0 || filteredSuppliers.length > 0) ? (
+                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-auto rounded-md border border-[#D8E4F2] bg-white shadow-lg">
+                        {filteredGstBusinesses.length > 0 ? (
+                          <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#62789A]">
+                            B2B businesses
+                          </div>
+                        ) : null}
+                        {filteredGstBusinesses.map((business) => (
+                          <button
+                            key={business.gstin}
+                            type="button"
+                            className="flex w-full flex-col px-3 py-2 text-left hover:bg-[#F5F9FF]"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => selectGstBusiness(business)}
+                          >
+                            <span className="text-[13px] font-medium text-[#031C45]">{business.name}</span>
+                            <span className="text-[11.5px] text-[#62789A]">
+                              {business.gstin}
+                              {business.address ? ` · ${business.address}` : ''}
+                            </span>
+                          </button>
+                        ))}
+                        {filteredSuppliers.length > 0 ? (
+                          <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#62789A]">
+                            Saved suppliers
+                          </div>
+                        ) : null}
                         {filteredSuppliers.map((s) => (
                           <button
                             key={s.name}
@@ -777,9 +858,32 @@ export function NewPurchasePage() {
           <Field label="Name">
             <Input
               value={newSupplier.name}
-              onChange={(e) => setNewSupplier((f) => ({ ...f, name: e.target.value }))}
+              onChange={(e) => {
+                setNewSupplier((f) => ({ ...f, name: e.target.value }))
+                setNewNameOpen(true)
+              }}
+              onFocus={() => setNewNameOpen(true)}
+              placeholder="Search a B2B business or type a name"
               autoFocus
             />
+            {newNameOpen && newSupplierMatches.length > 0 ? (
+              <div className="mt-1 max-h-40 overflow-auto rounded-md border border-[#D8E4F2] bg-white">
+                {newSupplierMatches.map((business) => (
+                  <button
+                    key={business.gstin}
+                    type="button"
+                    className="flex w-full flex-col px-3 py-2 text-left hover:bg-[#F5F9FF]"
+                    onClick={() => fillNewSupplierFromGst(business)}
+                  >
+                    <span className="text-[13px] font-medium text-[#031C45]">{business.name}</span>
+                    <span className="text-[11.5px] text-[#62789A]">
+                      {business.gstin}
+                      {business.address ? ` · ${business.address}` : ''}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </Field>
           <Field label="Phone">
             <Input

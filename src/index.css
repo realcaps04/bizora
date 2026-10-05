@@ -158,4 +158,13 @@ textarea {
     border-color: #c9d4e2 !important;
     box-shadow: none !important;
   }
+  .doc-print-half {
+    break-inside: auto;
+  }
+  .doc-print-half table {
+    break-inside: auto;
+  }
+  .doc-print-half tr {
+    break-inside: avoid;
+  }
 }

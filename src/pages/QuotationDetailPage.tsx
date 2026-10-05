@@ -126,6 +126,7 @@ export function QuotationDetailPage() {
         sgst={sgst}
         igst={0}
         grandTotal={Number(quotation.grand_total)}
+        paperFormat={settings.paper_format || 'A4'}
         notes={noteOnly || 'Thank you for your business'}
         terms={termsFromNotes?.length ? termsFromNotes : termsFromSetting(settings.invoice_terms)}
         bank={{

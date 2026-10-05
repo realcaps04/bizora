@@ -1,8 +1,9 @@
 import { app } from 'electron'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { GST_BUSINESSES } from '../../src/data/gstBusinesses'
-import { queryAll, queryOne } from '../database'
+import { GST_BUSINESSES, parseGstBusinessCsv, type GstBusinessRecord } from '../../src/data/gstBusinesses'
+import { queryAll, queryOne, run } from '../database'
+import { AppError, requireAuth, requirePermission } from '../security/session'
 
 let envLoaded = false
 
@@ -309,16 +310,133 @@ export interface GstBusiness {
   address: string
 }
 
-/** Shared GST registrations for the B2B business-name field. */
-export async function listGstBusinesses(): Promise<GstBusiness[]> {
-  if (!cloudReady()) return GST_BUSINESSES
-  try {
-    const rows = await callConvex<GstBusiness[]>('query', 'gstBusinesses:list', {})
-    return rows.length ? rows : GST_BUSINESSES
-  } catch (err) {
-    console.error('[convex] gst business list failed:', err instanceof Error ? err.message : err)
-    return GST_BUSINESSES
+const GST_BUSINESSES_KEY = 'gst_businesses'
+const GST_BUSINESSES_OMIT_KEY = 'gst_business_omit'
+
+function normalizeBusiness(row: Partial<GstBusinessRecord>): GstBusiness | null {
+  const name = String(row.name || '').trim()
+  const gstin = String(row.gstin || '').trim().toUpperCase()
+  if (!name || !gstin) return null
+  return {
+    name,
+    gstin,
+    registrationType: String(row.registrationType || 'Regular').trim() || 'Regular',
+    address: String(row.address || '').trim(),
   }
+}
+
+function mergeBusinesses(...lists: GstBusiness[][]): GstBusiness[] {
+  const byGstin = new Map<string, GstBusiness>()
+  for (const list of lists) {
+    for (const row of list) {
+      const next = normalizeBusiness(row)
+      if (next) byGstin.set(next.gstin, next)
+    }
+  }
+  return [...byGstin.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function readSetting(key: string): string {
+  const user = requireAuth()
+  return (
+    queryOne<{ value: string }>('SELECT value FROM settings WHERE company_id = ? AND key = ?', [user.companyId, key])
+      ?.value || ''
+  )
+}
+
+function writeSetting(key: string, value: string) {
+  const user = requireAuth()
+  run('INSERT OR REPLACE INTO settings (company_id, key, value) VALUES (?, ?, ?)', [user.companyId, key, value])
+}
+
+function readImportedBusinesses(): GstBusiness[] {
+  const raw = readSetting(GST_BUSINESSES_KEY)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as Partial<GstBusinessRecord>[]
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((item) => normalizeBusiness(item)).filter((item): item is GstBusiness => Boolean(item))
+  } catch {
+    return []
+  }
+}
+
+function readOmittedGstins(): Set<string> {
+  const raw = readSetting(GST_BUSINESSES_OMIT_KEY)
+  if (!raw) return new Set()
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.map((item) => String(item || '').trim().toUpperCase()).filter(Boolean))
+  } catch {
+    return new Set()
+  }
+}
+
+/** Shared GST registrations for the B2B business-name field and purchase suppliers. */
+export async function listGstBusinesses(): Promise<GstBusiness[]> {
+  const imported = readImportedBusinesses()
+  const omitted = readOmittedGstins()
+  let remote: GstBusiness[] = []
+  if (cloudReady()) {
+    try {
+      remote = await callConvex<GstBusiness[]>('query', 'gstBusinesses:list', {})
+    } catch (err) {
+      console.error('[convex] gst business list failed:', err instanceof Error ? err.message : err)
+    }
+  }
+  const shared = mergeBusinesses(GST_BUSINESSES, remote).filter((row) => !omitted.has(row.gstin))
+  return mergeBusinesses(shared, imported)
+}
+
+/** Save a CSV of business name, GSTIN, registration type, and address. */
+export async function importGstBusinesses(csvText: string): Promise<{ count: number; rows: GstBusiness[] }> {
+  requirePermission('settings.manage')
+  const incoming = parseGstBusinessCsv(csvText || '')
+    .map((row) => normalizeBusiness(row))
+    .filter((row): row is GstBusiness => Boolean(row))
+  if (!incoming.length) {
+    throw new AppError('The CSV needs a header row and at least one business with a name and GSTIN.', 'VALIDATION')
+  }
+  const stored = mergeBusinesses(readImportedBusinesses(), incoming)
+  writeSetting(GST_BUSINESSES_KEY, JSON.stringify(stored))
+  if (cloudReady()) {
+    try {
+      await callConvex('mutation', 'gstBusinesses:upsert', { businesses: incoming })
+    } catch (err) {
+      console.error('[convex] gst business import failed:', err instanceof Error ? err.message : err)
+    }
+  }
+  return { count: incoming.length, rows: await listGstBusinesses() }
+}
+
+/** Update one business. A changed GSTIN replaces the previous row. */
+export async function updateGstBusiness(input: {
+  originalGstin: string
+  name: string
+  gstin: string
+  registrationType?: string
+  address?: string
+}): Promise<GstBusiness[]> {
+  requirePermission('settings.manage')
+  const next = normalizeBusiness(input)
+  if (!next) throw new AppError('Enter the business name and GSTIN.', 'VALIDATION')
+  const original = String(input.originalGstin || '').trim().toUpperCase()
+  const imported = readImportedBusinesses().filter((row) => row.gstin !== original && row.gstin !== next.gstin)
+  imported.push(next)
+  writeSetting(GST_BUSINESSES_KEY, JSON.stringify(imported))
+  const omitted = readOmittedGstins()
+  if (original && original !== next.gstin) omitted.add(original)
+  omitted.delete(next.gstin)
+  writeSetting(GST_BUSINESSES_OMIT_KEY, JSON.stringify([...omitted]))
+  if (cloudReady()) {
+    try {
+      await callConvex('mutation', 'gstBusinesses:upsert', { businesses: [next] })
+    } catch (err) {
+      console.error('[convex] gst business update failed:', err instanceof Error ? err.message : err)
+    }
+  }
+  return listGstBusinesses()
 }
 
 /** Shared categories stored for download into the local app. */

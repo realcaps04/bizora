@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { amountInWords, cn, formatDate, formatMoney } from '@/utils'
 import { UpiQr, isUpiId } from '@/components/UpiQr'
 
@@ -58,6 +59,7 @@ export interface DocumentPrintProps {
   notes?: string | null
   terms?: string[]
   bank?: PrintBank
+  paperFormat?: string | null
   className?: string
 }
 
@@ -156,6 +158,7 @@ export function DocumentPrint({
   notes,
   terms,
   bank,
+  paperFormat,
   className,
 }: DocumentPrintProps) {
   const companyName = String(company.name || 'Company')
@@ -184,6 +187,165 @@ export function DocumentPrint({
     Boolean(bank?.ifsc) ||
     Boolean(bank?.bankName) ||
     isUpiId(upiId)
+  const half = paperFormat === 'half-a4'
+
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.setAttribute('data-bizora-paper', '1')
+    style.textContent = half
+      ? '@media print{@page{size:A5 landscape;margin:4mm 5mm;}}'
+      : '@media print{@page{size:A4;margin:10mm;}}'
+    document.head.appendChild(style)
+    return () => style.remove()
+  }, [half])
+
+  if (half) {
+    return (
+      <div
+        className={cn(
+          'doc-print doc-print-half mx-auto w-full max-w-[794px] bg-white text-[#0F2744]',
+          'border border-[#C9D4E2] print:border-0',
+          className,
+        )}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[#C9D4E2] px-3 py-1.5">
+          <div className="min-w-0">
+            <div className="text-[15px] font-bold leading-tight tracking-[0.03em] text-[#0B3A7A]">{title}</div>
+            <div className="text-[12px] font-bold leading-tight text-[#0F2744]">{companyName}</div>
+            <div className="mt-0.5 text-[10px] leading-snug text-[#4A5D78]">
+              {[company.address ? String(company.address).replace(/\s*\n\s*/g, ', ') : '', company.mobile ? `Ph ${company.mobile}` : '', company.gstin ? `GSTIN ${company.gstin}` : '']
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
+          </div>
+          <table className="w-[210px] shrink-0 border-collapse text-[10px]">
+            <tbody>
+              <MetaRow label={isInvoice ? 'Invoice#' : 'No.'} value={documentNumber} />
+              <MetaRow label="Date" value={formatDate(documentDate)} />
+              <MetaRow label={isInvoice ? 'Due' : 'Valid'} value={formatDate(dueOrValidDate)} />
+            </tbody>
+          </table>
+        </div>
+
+        <div className="grid grid-cols-2 border-b border-[#C9D4E2] text-[10.5px] leading-snug">
+          <div className="border-r border-[#C9D4E2] px-3 py-1.5">
+            <span className="font-semibold text-[#4A5D78]">Bill to </span>
+            <span className="font-bold text-[#0F2744]">{customer.name || '—'}</span>
+            {customer.gstin ? <span className="text-[#4A5D78]"> · {customer.gstin}</span> : null}
+            {customer.phone ? <span className="text-[#4A5D78]"> · {customer.phone}</span> : null}
+            {customer.address ? (
+              <div className="text-[#4A5D78]">{customer.address.replace(/\s*\n\s*/g, ', ')}</div>
+            ) : null}
+          </div>
+          <div className="px-3 py-1.5 text-[#4A5D78]">
+            <div>
+              Place: <span className="font-medium text-[#0F2744]">{placeOfSupply || 'Kerala'}</span>
+              {isInvoice ? (
+                <span>
+                  {' '}
+                  · {supplyType || 'Business to Customer'}
+                  {paymentMode ? ` · ${paymentMode}` : ''}
+                </span>
+              ) : null}
+            </div>
+            {invoiceType || poNumber || reverseCharge ? (
+              <div>
+                {[invoiceType, poNumber ? `PO ${poNumber}` : '', reverseCharge ? 'Reverse charge' : '']
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+            ) : null}
+            {shippingAddress ? <div>Ship to: {shippingAddress.replace(/\s*\n\s*/g, ', ')}</div> : null}
+          </div>
+        </div>
+
+        <table className="w-full border-collapse text-[10.5px]">
+          <thead>
+            <tr className="bg-[#EEF2F7] text-left text-[9.5px] font-semibold uppercase tracking-wide text-[#4A5D78]">
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1 w-6">#</th>
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1">Item</th>
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1 w-12">HSN</th>
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1 w-10 text-right">Qty</th>
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1 w-[72px] text-right">Rate</th>
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1 w-12 text-right">GST</th>
+              <th className="border-b border-[#C9D4E2] px-1.5 py-1 w-[78px] text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, idx) => {
+              const parsed = splitProductName(item.productName)
+              return (
+                <tr key={item.id || `${idx}-${item.productName}`} className="border-b border-[#E2E8F0]">
+                  <td className="px-1.5 py-1 align-top text-[#4A5D78]">{idx + 1}</td>
+                  <td className="px-1.5 py-1 align-top font-semibold text-[#0F2744]">
+                    {parsed.title}
+                    {item.discount > 0 ? (
+                      <span className="ml-1 font-normal text-[#6B7C93]">−{formatMoney(item.discount)}</span>
+                    ) : null}
+                  </td>
+                  <td className="px-1.5 py-1 align-top text-[#4A5D78]">{item.hsn || '—'}</td>
+                  <td className="px-1.5 py-1 align-top text-right tabular-nums">{item.qty}</td>
+                  <td className="px-1.5 py-1 align-top text-right tabular-nums">{formatMoney(item.rate)}</td>
+                  <td className="px-1.5 py-1 align-top text-right tabular-nums">{item.taxRate}%</td>
+                  <td className="px-1.5 py-1 align-top text-right font-medium tabular-nums">{formatMoney(item.amount)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        <div className="grid grid-cols-[1.2fr_0.8fr] border-b border-[#C9D4E2]">
+          <div className="px-3 py-1.5 text-[10px] leading-snug text-[#4A5D78]">
+            <div>
+              Items / Qty: {items.length} / {totalQty.toFixed(2)}
+            </div>
+            <div className="mt-0.5">
+              <span>In words: </span>
+              <span className="font-semibold text-[#0F2744]">{amountInWords(grandTotal)}</span>
+            </div>
+            {hasBank ? (
+              <div className="mt-1 flex items-start gap-2">
+                <div>
+                  {[bank?.bankName, bank?.accountName, bank?.accountNumber ? `A/c ${bank.accountNumber}` : '', bank?.ifsc, isUpiId(upiId) ? upiId : '']
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
+                {isUpiId(upiId) ? (
+                  <UpiQr upiId={upiId} payeeName={companyName} amount={upiAmount} note={documentNumber} size={52} />
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <table className="w-full border-collapse border-l border-[#C9D4E2]">
+            <tbody>
+              <TotalRow label="Taxable" value={formatMoney(taxable)} />
+              {interState ? (
+                <TotalRow label="IGST" value={formatMoney(igst)} />
+              ) : (
+                <TotalRow label="CGST + SGST" value={formatMoney(cgst + sgst)} />
+              )}
+              {cess > 0 ? <TotalRow label="Cess" value={formatMoney(cess)} /> : null}
+              {otherCharges > 0 ? <TotalRow label="Other" value={formatMoney(otherCharges)} /> : null}
+              {discount > 0 ? <TotalRow label="Discount" value={formatMoney(discount)} /> : null}
+              <TotalRow label="Total" value={formatMoney(grandTotal)} bold />
+              {isInvoice ? <TotalRow label="Balance" value={formatMoney(balanceDue)} /> : null}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-end justify-between gap-3 px-3 py-1.5">
+          <div className="min-w-0 text-[9px] leading-snug text-[#4A5D78]">
+            {termLines.slice(0, 3).join(' ')}
+            {noteText && noteText !== 'Thank you for your business' ? ` ${noteText}` : ''}
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="mb-4 ml-auto w-28 border-b border-[#0F2744]" />
+            <div className="text-[10px] font-bold text-[#0F2744]">Authorized Signatory</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

@@ -318,3 +318,80 @@ export function downloadOneInvoicePdf(invoice: Invoice & Record<string, unknown>
   pages.push(commands.join('\n'))
   downloadBlob(filename.endsWith('.pdf') ? filename : `${filename}.pdf`, buildPdf(pages, false))
 }
+
+export interface ExpenseExportRow {
+  category: string
+  description?: string | null
+  amount: number
+  expense_date: string
+  payment_method?: string | null
+  created_by_name?: string | null
+}
+
+const EXPENSE_HEADERS = ['Date', 'Category', 'Description', 'Payment', 'Amount', 'Created by']
+
+function expenseCells(row: ExpenseExportRow): Cell[] {
+  return [
+    formatDate(row.expense_date),
+    row.category || '',
+    row.description || '',
+    row.payment_method || '',
+    Number(row.amount) || 0,
+    row.created_by_name || '',
+  ]
+}
+
+export function downloadExpenseListExcel(rows: ExpenseExportRow[], filename: string) {
+  downloadExcelFile(filename, [{ name: 'Expenses', rows: [EXPENSE_HEADERS, ...rows.map(expenseCells)] }])
+}
+
+export function downloadExpenseListPdf(rows: ExpenseExportRow[], filename: string, title: string) {
+  const columns = [
+    { header: 'Date', width: 80 },
+    { header: 'Category', width: 110 },
+    { header: 'Description', width: 240 },
+    { header: 'Payment', width: 100 },
+    { header: 'Amount', width: 90, align: 'right' as const },
+    { header: 'Created by', width: 140 },
+  ]
+  const table = rows.map((row) => {
+    const cells = expenseCells(row)
+    return [String(cells[0]), String(cells[1]), String(cells[2]), String(cells[3]), formatMoney(Number(cells[4])), String(cells[5])]
+  })
+  downloadBlob(filename.endsWith('.pdf') ? filename : `${filename}.pdf`, drawTable(title, columns, table, true))
+}
+
+export function downloadOneExpenseExcel(row: ExpenseExportRow, filename: string) {
+  downloadExcelFile(filename, [
+    {
+      name: 'Expense',
+      rows: [
+        ['Date', formatDate(row.expense_date)],
+        ['Category', row.category || ''],
+        ['Description', row.description || ''],
+        ['Payment', row.payment_method || ''],
+        ['Amount', Number(row.amount) || 0],
+        ['Created by', row.created_by_name || ''],
+      ],
+    },
+  ])
+}
+
+export function downloadOneExpensePdf(row: ExpenseExportRow, filename: string) {
+  const columns = [
+    { header: 'Field', width: 140 },
+    { header: 'Value', width: 360 },
+  ]
+  const table = [
+    ['Date', formatDate(row.expense_date)],
+    ['Category', row.category || ''],
+    ['Description', row.description || ''],
+    ['Payment', row.payment_method || ''],
+    ['Amount', formatMoney(Number(row.amount) || 0)],
+    ['Created by', row.created_by_name || ''],
+  ]
+  downloadBlob(
+    filename.endsWith('.pdf') ? filename : `${filename}.pdf`,
+    drawTable(`Expense · ${row.category || 'Record'}`, columns, table, false),
+  )
+}

@@ -96,6 +96,8 @@ export interface BizoraApi {
   dashboardStats: () => Promise<ApiResult<unknown>>
   listCustomers: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   listGstBusinesses: () => Promise<ApiResult<unknown>>
+  importGstBusinesses: (csvText: string) => Promise<ApiResult<unknown>>
+  updateGstBusiness: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   getCustomer: (id: string) => Promise<ApiResult<unknown>>
   createCustomer: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   updateCustomer: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
@@ -136,6 +138,7 @@ export interface BizoraApi {
   nextPurchaseNumber: () => Promise<ApiResult<unknown>>
   listExpenses: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   createExpense: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
+  updateExpense: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>
   deleteExpense: (id: string) => Promise<ApiResult<unknown>>
   listPayments: (opts?: Record<string, unknown>) => Promise<ApiResult<unknown>>
   createPayment: (data: Record<string, unknown>) => Promise<ApiResult<unknown>>

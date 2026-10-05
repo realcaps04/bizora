@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, Field, Input, PageHeader, Select, Spinner } from '@/components/ui'
+import { Button, Card, Field, Input, Modal, PageHeader, Select, Spinner } from '@/components/ui'
 import { DEFAULT_INVOICE_TERMS, termsFromSetting } from '@/components/DocumentPrint'
 import { BrandLogo } from '@/components/BrandLogo'
 import { UpiQr, isUpiId } from '@/components/UpiQr'
 import { useAppStore } from '@/stores/app'
+import { GST_BUSINESSES, parseGstBusinessCsv, type GstBusinessRecord } from '@/data/gstBusinesses'
 import { callApi, formatDateTime, formatMoney } from '@/utils'
 
 export function ReportsPage() {
@@ -567,6 +568,7 @@ export function SettingsPage() {
     { id: 'backup', label: 'Backup' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'updates', label: 'Updates' },
+    { id: 'import', label: 'Import' },
     { id: 'audit', label: 'Audit Log' },
   ]
 
@@ -635,9 +637,13 @@ export function SettingsPage() {
           </Field>
           <Field label="Paper Format">
             <Select value={settings.paper_format || 'A4'} onChange={(e) => setSettings({ ...settings, paper_format: e.target.value })}>
-              <option value="A4">A4</option>
+              <option value="A4">A4 (210 × 297 mm)</option>
+              <option value="half-a4">Half A4 (210 × 148.5 mm)</option>
               <option value="thermal">Thermal</option>
             </Select>
+            <p className="mt-1 text-[12px] leading-snug text-[#62789A]">
+              Half A4 is an A4 sheet cut across the middle (A5 landscape, 210 × 148 mm). When you print, leave the paper size as A5 landscape so the bill stays on that sheet.
+            </p>
           </Field>
           <Field label="Place of Supply (PDF)" error={invoiceErrors.place}>
             <Input
@@ -890,6 +896,8 @@ export function SettingsPage() {
       ) : null}
 
       {tab === 'updates' ? <UpdatesPanel /> : null}
+
+      {tab === 'import' ? <GstBusinessImportPanel /> : null}
 
       {tab === 'audit' ? <AuditPanel /> : null}
     </div>
@@ -1150,6 +1158,213 @@ function GoogleDrivePanel() {
         </>
       ) : null}
     </div>
+  )
+}
+
+function GstBusinessImportPanel() {
+  const { showToast } = useAppStore()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [csvText, setCsvText] = useState('')
+  const [preview, setPreview] = useState<GstBusinessRecord[]>([])
+  const [saved, setSaved] = useState<GstBusinessRecord[]>([])
+  const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState<(GstBusinessRecord & { originalGstin: string }) | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  useEffect(() => {
+    void callApi(() => window.bizora.listGstBusinesses())
+      .then((rows) => setSaved((rows as GstBusinessRecord[]) || []))
+      .catch(() => setSaved(GST_BUSINESSES))
+  }, [])
+
+  function chooseFile(file: File | undefined) {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = String(reader.result || '')
+      const rows = parseGstBusinessCsv(text)
+      setCsvText(text)
+      setPreview(rows)
+      if (!rows.length) showToast('No businesses found. Use columns name and gstin.', 'error')
+    }
+    reader.readAsText(file)
+  }
+
+  async function importFile() {
+    if (!preview.length) {
+      showToast('Choose a CSV with a name and GSTIN for each business', 'error')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = (await callApi(() => window.bizora.importGstBusinesses(csvText))) as {
+        count: number
+        rows: GstBusinessRecord[]
+      }
+      setSaved(result.rows || [])
+      setPreview([])
+      setCsvText('')
+      if (fileRef.current) fileRef.current.value = ''
+      showToast(`Imported ${result.count} business${result.count === 1 ? '' : 'es'}`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to import businesses', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveEdit() {
+    if (!editing) return
+    if (!editing.name.trim() || !editing.gstin.trim()) {
+      showToast('Enter the business name and GSTIN', 'error')
+      return
+    }
+    setSavingEdit(true)
+    try {
+      const rows = (await callApi(() =>
+        window.bizora.updateGstBusiness({
+          originalGstin: editing.originalGstin,
+          name: editing.name.trim(),
+          gstin: editing.gstin.trim().toUpperCase(),
+          registrationType: editing.registrationType.trim() || 'Regular',
+          address: editing.address.trim(),
+        }),
+      )) as GstBusinessRecord[]
+      setSaved(rows || [])
+      setEditing(null)
+      showToast('Business updated', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to update this business', 'error')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  return (
+    <Card className="max-w-6xl space-y-4 p-5">
+      <div>
+        <h2 className="text-sm font-semibold">Import B2B businesses</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          These names appear in the B2B sales business field and in the purchase supplier field. A matching GSTIN updates the saved business.
+        </p>
+      </div>
+      <div className="rounded-md border border-border bg-slate-50 px-3 py-2 font-mono text-[12px] text-ink">
+        name,gstin,registration_type,address
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="block w-full text-sm"
+        onChange={(e) => chooseFile(e.target.files?.[0])}
+      />
+      {preview.length > 0 ? (
+        <div className="overflow-hidden rounded-md border border-border">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs text-ink-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">Business</th>
+                <th className="px-3 py-2 font-medium">GSTIN</th>
+                <th className="px-3 py-2 font-medium">Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {preview.map((row) => (
+                <tr key={row.gstin} className="border-t border-border">
+                  <td className="px-3 py-2">{row.name}</td>
+                  <td className="px-3 py-2">{row.gstin}</td>
+                  <td className="px-3 py-2">{row.registrationType}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      <Button disabled={busy || !preview.length} onClick={() => void importFile()}>
+        {busy ? 'Importing…' : 'Import businesses'}
+      </Button>
+      <div>
+        <div className="mb-2 text-sm font-semibold">Business owners ({saved.length})</div>
+        <div className="max-h-[32rem] overflow-auto rounded-md border border-border">
+          <table className="w-full min-w-[880px] text-left text-sm">
+            <thead className="sticky top-0 bg-slate-50 text-xs text-ink-muted">
+              <tr>
+                <th className="w-[28%] px-3 py-2 font-medium">Business name</th>
+                <th className="w-[18%] px-3 py-2 font-medium">GSTIN</th>
+                <th className="w-[12%] px-3 py-2 font-medium">Registration</th>
+                <th className="px-3 py-2 font-medium">Address</th>
+                <th className="w-[88px] px-3 py-2 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {saved.map((row) => (
+                <tr key={row.gstin} className="border-t border-border">
+                  <td className="px-3 py-2.5 font-medium text-ink">{row.name}</td>
+                  <td className="px-3 py-2.5 font-mono text-[12px]">{row.gstin}</td>
+                  <td className="px-3 py-2.5">{row.registrationType || 'Regular'}</td>
+                  <td className="px-3 py-2.5 text-ink-muted">{row.address || '—'}</td>
+                  <td className="px-3 py-2.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditing({ ...row, originalGstin: row.gstin })}
+                    >
+                      Edit
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <Modal
+        open={Boolean(editing)}
+        title="Edit business"
+        onClose={() => {
+          if (!savingEdit) setEditing(null)
+        }}
+        footer={
+          <>
+            <Button variant="outline" disabled={savingEdit} onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button disabled={savingEdit} onClick={() => void saveEdit()}>
+              {savingEdit ? 'Saving…' : 'Save changes'}
+            </Button>
+          </>
+        }
+      >
+        {editing ? (
+          <div className="grid gap-3">
+            <Field label="Business name">
+              <Input
+                value={editing.name}
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              />
+            </Field>
+            <Field label="GSTIN">
+              <Input
+                value={editing.gstin}
+                onChange={(e) => setEditing({ ...editing, gstin: e.target.value.toUpperCase() })}
+              />
+            </Field>
+            <Field label="Registration type">
+              <Input
+                value={editing.registrationType}
+                onChange={(e) => setEditing({ ...editing, registrationType: e.target.value })}
+              />
+            </Field>
+            <Field label="Address">
+              <Input
+                value={editing.address}
+                onChange={(e) => setEditing({ ...editing, address: e.target.value })}
+              />
+            </Field>
+          </div>
+        ) : null}
+      </Modal>
+    </Card>
   )
 }
 

@@ -423,7 +423,17 @@ export function createPurchase(input: {
 
 // ─── Expenses ──────────────────────────────────────────────
 
-export function listExpenses(opts: { page?: number; pageSize?: number; category?: string; from?: string; to?: string } = {}) {
+export function listExpenses(
+  opts: {
+    page?: number
+    pageSize?: number
+    category?: string
+    paymentMethod?: string
+    search?: string
+    from?: string
+    to?: string
+  } = {},
+) {
   const user = requireAuth()
   const page = Math.max(1, opts.page ?? 1)
   const pageSize = Math.min(100, Math.max(10, opts.pageSize ?? 50))
@@ -433,6 +443,16 @@ export function listExpenses(opts: { page?: number; pageSize?: number; category?
   if (opts.category) {
     where += ' AND e.category = ?'
     params.push(opts.category)
+  }
+  if (opts.paymentMethod) {
+    where += ' AND e.payment_method = ?'
+    params.push(opts.paymentMethod)
+  }
+  const search = (opts.search || '').trim()
+  if (search) {
+    where += ' AND (e.category LIKE ? OR IFNULL(e.description, \'\') LIKE ? OR IFNULL(e.payment_method, \'\') LIKE ? OR IFNULL(e.notes, \'\') LIKE ?)'
+    const like = `%${search}%`
+    params.push(like, like, like, like)
   }
   if (opts.from) {
     where += ' AND e.expense_date >= ?'
@@ -481,6 +501,39 @@ export function createExpense(input: {
     ],
   )
   writeAudit(user.companyId, user, 'expense.created', 'expenses', id, `${input.category} expense recorded`)
+  return queryOne('SELECT * FROM expenses WHERE id = ?', [id])
+}
+
+export function updateExpense(
+  id: string,
+  input: {
+    category: string
+    description?: string
+    amount: number
+    expenseDate?: string
+    paymentMethod?: string
+  },
+) {
+  const user = requirePermission('expenses.manage')
+  const existing = queryOne('SELECT id FROM expenses WHERE id = ? AND company_id = ?', [id, user.companyId])
+  if (!existing) throw new AppError('Expense not found.', 'NOT_FOUND')
+  if (!(Number(input.amount) > 0)) throw new AppError('Amount must be greater than zero.', 'VALIDATION')
+  if (!String(input.category || '').trim()) throw new AppError('Choose a category.', 'VALIDATION')
+  run(
+    `UPDATE expenses
+     SET category = ?, description = ?, amount = ?, expense_date = ?, payment_method = ?
+     WHERE id = ? AND company_id = ?`,
+    [
+      input.category.trim(),
+      input.description?.trim() || null,
+      Number(input.amount),
+      input.expenseDate || now().slice(0, 10),
+      input.paymentMethod || null,
+      id,
+      user.companyId,
+    ],
+  )
+  writeAudit(user.companyId, user, 'expense.updated', 'expenses', id, `${input.category} expense updated`)
   return queryOne('SELECT * FROM expenses WHERE id = ?', [id])
 }
 

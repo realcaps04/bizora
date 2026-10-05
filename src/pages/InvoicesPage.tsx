@@ -450,6 +450,7 @@ export function InvoiceDetailPage() {
         paidAmount={Number(invoice.paid_amount || 0)}
         balanceDue={balance}
         notes={invoice.notes}
+        paperFormat={settings.paper_format || 'A4'}
         terms={termsFromSetting(settings.invoice_terms)}
         bank={{
           accountName: settings.bank_account_name,

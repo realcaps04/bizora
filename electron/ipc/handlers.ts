@@ -3,7 +3,7 @@ import { IpcChannels } from './channels'
 import { AppError, getSession, lockSession, requireAuth, unlockSession, shouldAutoLock } from '../security/session'
 import * as auth from '../services/auth'
 import * as catalog from '../services/catalog'
-import { listGstBusinesses } from '../services/accountCloud'
+import { importGstBusinesses, listGstBusinesses, updateGstBusiness } from '../services/accountCloud'
 import * as starterCatalogs from '../services/starterCatalogs'
 import * as invoices from '../services/invoices'
 import * as operations from '../services/operations'
@@ -118,6 +118,10 @@ export function registerIpcHandlers(): void {
       requireAuth()
       return listGstBusinesses()
     },
+    [IpcChannels.GST_BUSINESSES_IMPORT]: (payload) =>
+      importGstBusinesses((payload as { csvText?: string })?.csvText || ''),
+    [IpcChannels.GST_BUSINESSES_UPDATE]: (payload) =>
+      updateGstBusiness(payload as Parameters<typeof updateGstBusiness>[0]),
     [IpcChannels.CUSTOMERS_GET]: (payload) => catalog.getCustomer((payload as { id: string }).id),
     [IpcChannels.CUSTOMERS_CREATE]: (payload) => catalog.createCustomer(payload as Parameters<typeof catalog.createCustomer>[0]),
     [IpcChannels.CUSTOMERS_UPDATE]: (payload) => {
@@ -198,6 +202,10 @@ export function registerIpcHandlers(): void {
     [IpcChannels.EXPENSES_LIST]: (payload) => operations.listExpenses((payload as object) || {}),
     [IpcChannels.EXPENSES_CREATE]: (payload) =>
       operations.createExpense(payload as Parameters<typeof operations.createExpense>[0]),
+    [IpcChannels.EXPENSES_UPDATE]: (payload) => {
+      const body = payload as { id: string } & Parameters<typeof operations.updateExpense>[1]
+      return operations.updateExpense(body.id, body)
+    },
     [IpcChannels.EXPENSES_DELETE]: (payload) => {
       operations.deleteExpense((payload as { id: string }).id)
       return true

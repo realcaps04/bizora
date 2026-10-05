@@ -3,6 +3,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner } from '@/components/ui'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatDate, formatMoney, statusTone } from '@/utils'
+import {
+  downloadExpenseListExcel,
+  downloadExpenseListPdf,
+  downloadOneExpenseExcel,
+  downloadOneExpensePdf,
+  safeFileName,
+  type ExpenseExportRow,
+} from '@/utils/invoiceExport'
 
 export function QuotationsPage() {
   const navigate = useNavigate()
@@ -158,43 +166,211 @@ export function PurchasesPage() {
   )
 }
 
-export function ExpensesPage() {
-  const { showToast } = useAppStore()
-  const [rows, setRows] = useState<Record<string, unknown>[]>([])
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({
+const EXPENSE_CATEGORIES = ['Rent', 'Electricity', 'Salary', 'Transport', 'Maintenance', 'Office', 'Other']
+const EXPENSE_METHODS = ['Cash', 'UPI', 'Card', 'Bank Transfer']
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function emptyExpenseForm() {
+  return {
+    id: '',
     category: 'Rent',
     description: '',
     amount: 0,
-    expenseDate: new Date().toISOString().slice(0, 10),
+    expenseDate: todayIso(),
     paymentMethod: 'Cash',
-  })
+  }
+}
+
+function asExpense(row: Record<string, unknown>): ExpenseExportRow & { id: string } {
+  return {
+    id: String(row.id),
+    category: String(row.category || ''),
+    description: row.description ? String(row.description) : '',
+    amount: Number(row.amount) || 0,
+    expense_date: String(row.expense_date || ''),
+    payment_method: row.payment_method ? String(row.payment_method) : '',
+    created_by_name: row.created_by_name ? String(row.created_by_name) : '',
+  }
+}
+
+export function ExpensesPage() {
+  const { showToast } = useAppStore()
+  const [rows, setRows] = useState<Record<string, unknown>[]>([])
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState('')
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [form, setForm] = useState(emptyExpenseForm)
+
+  const filters = {
+    search: search.trim() || undefined,
+    category: category || undefined,
+    paymentMethod: paymentMethod || undefined,
+    from: from || undefined,
+    to: to || undefined,
+  }
+  const filtering = Boolean(search.trim() || category || paymentMethod || from || to)
+
+  async function fetchMatching() {
+    const all: Record<string, unknown>[] = []
+    let page = 1
+    let total = Number.POSITIVE_INFINITY
+    while (all.length < total) {
+      const data = (await callApi(() => window.bizora.listExpenses({ ...filters, page, pageSize: 100 }))) as {
+        rows: Record<string, unknown>[]
+        total: number
+      }
+      total = Number(data.total) || 0
+      const batch = data.rows || []
+      all.push(...batch)
+      if (!batch.length) break
+      page += 1
+    }
+    return all
+  }
 
   async function load() {
-    const data = await callApi(() => window.bizora.listExpenses({ pageSize: 100 }))
-    setRows((data as { rows: Record<string, unknown>[] }).rows)
+    setLoading(true)
+    try {
+      setRows(await fetchMatching())
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to load expenses', 'error')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
     void load()
-  }, [])
+    // Reload when the search text or filters change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, category, paymentMethod, from, to])
+
+  function openNew() {
+    setForm(emptyExpenseForm())
+    setOpen(true)
+  }
+
+  function openEdit(row: Record<string, unknown>) {
+    setForm({
+      id: String(row.id),
+      category: String(row.category || 'Other'),
+      description: String(row.description || ''),
+      amount: Number(row.amount) || 0,
+      expenseDate: String(row.expense_date || todayIso()).slice(0, 10),
+      paymentMethod: String(row.payment_method || 'Cash'),
+    })
+    setOpen(true)
+  }
 
   async function save() {
+    setSaving(true)
     try {
-      await callApi(() => window.bizora.createExpense(form))
-      showToast('Expense recorded', 'success')
+      const payload = {
+        category: form.category,
+        description: form.description,
+        amount: form.amount,
+        expenseDate: form.expenseDate,
+        paymentMethod: form.paymentMethod,
+      }
+      if (form.id) {
+        await callApi(() => window.bizora.updateExpense({ id: form.id, ...payload }))
+        showToast('Expense updated', 'success')
+      } else {
+        await callApi(() => window.bizora.createExpense(payload))
+        showToast('Expense recorded', 'success')
+      }
       setOpen(false)
       await load()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Unable to save expense', 'error')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  async function downloadList(format: 'pdf' | 'excel') {
+    setExporting(format)
+    try {
+      const matched = (await fetchMatching()).map(asExpense)
+      if (!matched.length) {
+        showToast('No expenses to download', 'error')
+        return
+      }
+      const stamp = from || to ? `${from || 'start'}-to-${to || 'today'}` : 'all'
+      if (format === 'pdf') downloadExpenseListPdf(matched, `expenses-${stamp}.pdf`, 'Expenses')
+      else downloadExpenseListExcel(matched, `expenses-${stamp}.xls`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Unable to download expenses', 'error')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  function downloadOne(row: Record<string, unknown>, format: 'pdf' | 'excel') {
+    const expense = asExpense(row)
+    const file = `expense-${safeFileName(expense.category)}-${expense.expense_date}`
+    if (format === 'pdf') downloadOneExpensePdf(expense, `${file}.pdf`)
+    else downloadOneExpenseExcel(expense, `${file}.xls`)
   }
 
   return (
     <div>
-      <PageHeader title="Expenses" actions={<Button onClick={() => setOpen(true)}>Add Expense</Button>} />
-      {rows.length === 0 ? (
-        <EmptyState title="No expenses recorded" />
+      <PageHeader title="Expenses" actions={<Button onClick={openNew}>Add Expense</Button>} />
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <Input
+          className="max-w-xs"
+          placeholder="Search description, category…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select className="w-40" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">All categories</option>
+          {EXPENSE_CATEGORIES.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </Select>
+        <Select className="w-40" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+          <option value="">All methods</option>
+          {EXPENSE_METHODS.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </Select>
+        <label className="block">
+          <span className="mb-1 block text-[12px] font-medium text-ink-muted">From</span>
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[12px] font-medium text-ink-muted">To</span>
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </label>
+      </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white px-3 py-2.5">
+        <div className="mr-1 text-[12px] font-medium text-ink-muted">Download</div>
+        <Button size="sm" variant="outline" disabled={Boolean(exporting)} onClick={() => void downloadList('pdf')}>
+          {exporting === 'pdf' ? 'Preparing…' : 'PDF'}
+        </Button>
+        <Button size="sm" variant="outline" disabled={Boolean(exporting)} onClick={() => void downloadList('excel')}>
+          {exporting === 'excel' ? 'Preparing…' : 'Excel'}
+        </Button>
+        <span className="text-[12px] text-ink-muted">Downloads the expenses that match the search and filters.</span>
+      </div>
+      {loading ? (
+        <Spinner />
+      ) : rows.length === 0 ? (
+        <EmptyState title={filtering ? 'No expenses match' : 'No expenses recorded'} />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-white">
           <table className="w-full text-left text-sm">
@@ -206,6 +382,7 @@ export function ExpensesPage() {
                 <th className="px-4 py-2.5 font-medium">Method</th>
                 <th className="px-4 py-2.5 font-medium text-right">Amount</th>
                 <th className="px-4 py-2.5 font-medium">Created By</th>
+                <th className="px-4 py-2.5 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -217,19 +394,51 @@ export function ExpensesPage() {
                   <td className="px-4 py-2.5">{String(r.payment_method || '—')}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums">{formatMoney(Number(r.amount))}</td>
                   <td className="px-4 py-2.5">{String(r.created_by_name || '—')}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
+                        Edit
+                      </Button>
+                      <Select
+                        className="h-8 w-[7.5rem] text-xs"
+                        value=""
+                        onChange={(e) => {
+                          const format = e.target.value as 'pdf' | 'excel' | ''
+                          if (format) downloadOne(r, format)
+                          e.target.value = ''
+                        }}
+                      >
+                        <option value="">Download</option>
+                        <option value="pdf">PDF</option>
+                        <option value="excel">Excel</option>
+                      </Select>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <Modal open={open} title="Add Expense" onClose={() => setOpen(false)} footer={<Button onClick={() => void save()}>Save</Button>}>
+      <Modal
+        open={open}
+        title={form.id ? 'Edit Expense' : 'Add Expense'}
+        onClose={() => {
+          if (!saving) setOpen(false)
+        }}
+        footer={
+          <Button disabled={saving} onClick={() => void save()}>
+            {saving ? 'Saving…' : form.id ? 'Save changes' : 'Save'}
+          </Button>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Category">
             <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-              {['Rent', 'Electricity', 'Salary', 'Transport', 'Maintenance', 'Office', 'Other'].map((c) => (
+              {EXPENSE_CATEGORIES.map((c) => (
                 <option key={c}>{c}</option>
               ))}
+              {form.category && !EXPENSE_CATEGORIES.includes(form.category) ? <option>{form.category}</option> : null}
             </Select>
           </Field>
           <Field label="Amount">
@@ -240,7 +449,7 @@ export function ExpensesPage() {
           </Field>
           <Field label="Payment Method">
             <Select value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>
-              {['Cash', 'UPI', 'Card', 'Bank Transfer'].map((m) => (
+              {EXPENSE_METHODS.map((m) => (
                 <option key={m}>{m}</option>
               ))}
             </Select>
