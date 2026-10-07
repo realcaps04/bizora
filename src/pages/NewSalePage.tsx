@@ -29,7 +29,7 @@ import {
   type PaymentStatus,
 } from '@/data/b2b'
 import { GST_BUSINESSES } from '@/data/gstBusinesses'
-import { PRODUCT_UNITS, productUnit } from '@/data/units'
+import { PRODUCT_UNITS, convertLineMeasure, pricedMeasure, productUnit } from '@/data/units'
 import type { Customer, Product } from '@/types'
 
 interface LineItem {
@@ -487,14 +487,36 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
     setItems((prev) => [...prev, emptyLine()])
   }
 
+  function clearAmountDraft(key: string) {
+    setAmountDrafts((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
+  function measuredLine(
+    p: Product,
+    rate: number,
+    current?: { qty: number; specification: string },
+  ): { specification: string; rate: number; qty?: number } {
+    const spec = (current?.specification || '').trim()
+    const pieces = (!spec || spec === 'Pcs' || spec === 'Nos') && (current?.qty || 0) > 0 ? current!.qty : 1
+    const measured = pricedMeasure(p.name, p.unit, rate, pieces)
+    if (!measured) return { specification: productUnit(p.unit), rate }
+    return { specification: measured.unit, qty: measured.qty, rate: measured.rate }
+  }
+
   function applyProduct(key: string, p: Product) {
+    const current = items.find((item) => item.key === key)
+    clearAmountDraft(key)
     updateItem(key, {
       productId: p.id,
       productName: p.name,
-      specification: productUnit(p.unit),
       hsn: p.hsn || '',
-      rate: Number(p.selling_rate) || 0,
       taxRate: Number(p.tax_rate) || 18,
+      ...measuredLine(p, Number(p.selling_rate) || 0, current),
     })
     setProductQuery('')
     setProductResults([])
@@ -511,24 +533,24 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                 ...i,
                 productId: p.id,
                 productName: p.name,
-                specification: productUnit(p.unit),
                 hsn: p.hsn || '',
-                rate: Number(p.selling_rate) || 0,
                 taxRate: Number(p.tax_rate) || 18,
+                ...measuredLine(p, Number(p.selling_rate) || 0, i),
               }
             : i,
         )
       }
+      const measured = measuredLine(p, Number(p.selling_rate) || 0)
       return [
         ...prev,
         {
           key: `line-${Date.now()}`,
           productId: p.id,
           productName: p.name,
-          specification: productUnit(p.unit),
+          specification: measured.specification,
           hsn: p.hsn || '',
-          qty: 1,
-          rate: Number(p.selling_rate) || 0,
+          qty: measured.qty ?? 1,
+          rate: measured.rate,
           discount: 0,
           taxRate: Number(p.tax_rate) || 18,
           ...emptyLineExtra(),
@@ -997,7 +1019,23 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                       <td className="px-3 py-2">
                         <select
                           value={productUnit(item.specification)}
-                          onChange={(e) => updateItem(item.key, { specification: e.target.value })}
+                          onChange={(e) => {
+                            const nextUnit = e.target.value
+                            const converted = convertLineMeasure(
+                              item.productName,
+                              item.qty,
+                              item.rate,
+                              item.specification,
+                              nextUnit,
+                            )
+                            clearAmountDraft(item.key)
+                            updateItem(
+                              item.key,
+                              converted
+                                ? { specification: nextUnit, qty: converted.qty, rate: converted.rate }
+                                : { specification: nextUnit },
+                            )
+                          }}
                           className={`h-8 w-full rounded border bg-white px-2 text-[13px] outline-none focus:border-[#0878F9] ${lineError('unit')}`}
                         >
                           {PRODUCT_UNITS.map((unit) => (
@@ -1428,7 +1466,9 @@ export function NewSalePage({ invoiceId }: { invoiceId?: string } = {}) {
                 >
                   <span>
                     {p.name}
-                    <span className="ml-2 text-[11px] text-[#62789A]">{productUnit(p.unit)}</span>
+                    <span className="ml-2 text-[11px] text-[#62789A]">
+                      {pricedMeasure(p.name, p.unit, Number(p.selling_rate) || 0)?.unit || productUnit(p.unit)}
+                    </span>
                   </span>
                   <span className="shrink-0 tabular-nums text-[#62789A]">{formatMoney(p.selling_rate)}</span>
                 </button>

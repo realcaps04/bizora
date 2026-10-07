@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Calendar, FileText, Plus, Printer, Search, Settings, Trash2, Truck } from 'lucide-react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
 import { GST_BUSINESSES, type GstBusinessRecord } from '@/data/gstBusinesses'
+import { pricedMeasure } from '@/data/units'
 import { useAppStore } from '@/stores/app'
 import { callApi, formatMoney, joinAddress, parseAddress } from '@/utils'
 import type { Product } from '@/types'
@@ -300,13 +301,25 @@ export function NewPurchasePage() {
     )
   }
 
+  function measuredPurchase(
+    p: Product,
+    current?: { qty: number; specification: string },
+  ): { rate: number; specification?: string; qty?: number } {
+    const spec = (current?.specification || '').trim()
+    const pieces = (!spec || spec === 'Pcs' || spec === 'Nos') && (current?.qty || 0) > 0 ? current!.qty : 1
+    const measured = pricedMeasure(p.name, p.unit, Number(p.purchase_rate) || 0, pieces)
+    if (!measured) return { rate: Number(p.purchase_rate) || 0 }
+    return { specification: measured.unit, qty: measured.qty, rate: measured.rate }
+  }
+
   function applyProduct(key: string, p: Product) {
+    const current = items.find((item) => item.key === key)
     updateItem(key, {
       productId: p.id,
       productName: p.name,
       hsn: p.hsn || '',
-      rate: Number(p.purchase_rate) || 0,
       taxRate: Number(p.tax_rate) || 18,
+      ...measuredPurchase(p, current),
     })
     setProductQuery('')
     setProductResults([])
@@ -324,22 +337,23 @@ export function NewPurchasePage() {
                 productId: p.id,
                 productName: p.name,
                 hsn: p.hsn || '',
-                rate: Number(p.purchase_rate) || 0,
                 taxRate: Number(p.tax_rate) || 18,
+                ...measuredPurchase(p, i),
               }
             : i,
         )
       }
+      const measured = measuredPurchase(p)
       return [
         ...prev,
         {
           key: `line-${Date.now()}`,
           productId: p.id,
           productName: p.name,
-          specification: '',
+          specification: measured.specification || '',
           hsn: p.hsn || '',
-          qty: 1,
-          rate: Number(p.purchase_rate) || 0,
+          qty: measured.qty ?? 1,
+          rate: measured.rate,
           discount: 0,
           taxRate: Number(p.tax_rate) || 18,
         },

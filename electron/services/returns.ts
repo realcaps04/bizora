@@ -1,3 +1,4 @@
+import { inventoryQty } from '../../src/data/units'
 import { queryAll, queryOne, run, withTransaction } from '../database'
 import { generateId } from '../security/crypto'
 import { AppError, requireAuth, requirePermission } from '../security/session'
@@ -225,10 +226,11 @@ export function createReturn(input: {
         user.companyId,
       ])
       if (!product) throw new AppError(`Product not found: ${line.productName}`, 'NOT_FOUND')
-      if (kind === 'purchase' && Number(product.current_stock) + 0.0001 < line.qty) {
+      const stockQty = inventoryQty(line.productName, line.qty)
+      if (kind === 'purchase' && Number(product.current_stock) + 0.0001 < stockQty) {
         throw new AppError(`${line.productName} does not have enough stock to return.`, 'VALIDATION')
       }
-      const stockChange = kind === 'sale' ? line.qty : -line.qty
+      const stockChange = kind === 'sale' ? stockQty : -stockQty
       run('UPDATE products SET current_stock = current_stock + ?, updated_at = ? WHERE id = ? AND company_id = ?', [
         stockChange,
         ts,

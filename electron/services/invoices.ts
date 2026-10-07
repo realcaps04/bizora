@@ -1,3 +1,4 @@
+import { inventoryQty } from '../../src/data/units'
 import { queryAll, queryOne, run, withTransaction } from '../database'
 import { generateId } from '../security/crypto'
 import { AppError, requireAuth, requirePermission } from '../security/session'
@@ -348,8 +349,9 @@ export function createInvoice(input: {
           user.companyId,
         ])
         if (!product) throw new AppError(`Product not found: ${item.productName}`, 'NOT_FOUND')
+        const stockQty = inventoryQty(item.productName, calc.qty)
         run('UPDATE products SET current_stock = current_stock - ?, updated_at = ? WHERE id = ? AND company_id = ?', [
-          calc.qty,
+          stockQty,
           ts,
           item.productId,
           user.companyId,
@@ -357,7 +359,7 @@ export function createInvoice(input: {
         run(
           `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, reference_id, created_by, created_at)
            VALUES (?, ?, ?, 'sale', ?, 'invoice', ?, ?, ?)`,
-          [generateId(), user.companyId, item.productId, -calc.qty, invoiceId, user.id, ts],
+          [generateId(), user.companyId, item.productId, -stockQty, invoiceId, user.id, ts],
         )
       }
     })
@@ -457,14 +459,14 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
   )
 
   withTransaction(() => {
-    const oldItems = queryAll<{ product_id: string | null; qty: number }>(
-      'SELECT product_id, qty FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
+    const oldItems = queryAll<{ product_id: string | null; product_name: string; qty: number }>(
+      'SELECT product_id, product_name, qty FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
       [id, user.companyId],
     )
     for (const item of oldItems) {
       if (!item.product_id) continue
       run('UPDATE products SET current_stock = current_stock + ?, updated_at = ? WHERE id = ? AND company_id = ?', [
-        item.qty,
+        inventoryQty(item.product_name, item.qty),
         ts,
         item.product_id,
         user.companyId,
@@ -538,8 +540,9 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
           user.companyId,
         ])
         if (!product) throw new AppError(`Product not found: ${item.productName}`, 'NOT_FOUND')
+        const stockQty = inventoryQty(item.productName, calc.qty)
         run('UPDATE products SET current_stock = current_stock - ?, updated_at = ? WHERE id = ? AND company_id = ?', [
-          calc.qty,
+          stockQty,
           ts,
           item.productId,
           user.companyId,
@@ -547,7 +550,7 @@ export function updateInvoice(id: string, input: Omit<Parameters<typeof createIn
         run(
           `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, reference_id, created_by, created_at)
            VALUES (?, ?, ?, 'sale', ?, 'invoice', ?, ?, ?)`,
-          [generateId(), user.companyId, item.productId, -calc.qty, id, user.id, ts],
+          [generateId(), user.companyId, item.productId, -stockQty, id, user.id, ts],
         )
       }
     })
@@ -599,13 +602,13 @@ function eraseInvoice(companyId: string, id: string, restoreSaleStock: boolean):
     [companyId, id],
   )
   for (const entry of saleReturns) {
-    const lines = queryAll<{ product_id: string | null; qty: number }>(
-      'SELECT product_id, qty FROM return_items WHERE return_id = ? AND company_id = ?',
+    const lines = queryAll<{ product_id: string | null; product_name: string; qty: number }>(
+      'SELECT product_id, product_name, qty FROM return_items WHERE return_id = ? AND company_id = ?',
       [entry.id, companyId],
     )
     for (const line of lines) {
       if (!line.product_id) continue
-      adjustStock(companyId, line.product_id, -Number(line.qty || 0), ts)
+      adjustStock(companyId, line.product_id, -inventoryQty(line.product_name, Number(line.qty || 0)), ts)
       productIds.add(line.product_id)
     }
     run(`DELETE FROM stock_movements WHERE company_id = ? AND reference_type = 'return' AND reference_id = ?`, [
@@ -618,13 +621,13 @@ function eraseInvoice(companyId: string, id: string, restoreSaleStock: boolean):
   }
 
   if (restoreSaleStock) {
-    const items = queryAll<{ product_id: string | null; qty: number }>(
-      'SELECT product_id, qty FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
+    const items = queryAll<{ product_id: string | null; product_name: string; qty: number }>(
+      'SELECT product_id, product_name, qty FROM invoice_items WHERE invoice_id = ? AND company_id = ?',
       [id, companyId],
     )
     for (const item of items) {
       if (!item.product_id) continue
-      adjustStock(companyId, item.product_id, Number(item.qty || 0), ts)
+      adjustStock(companyId, item.product_id, inventoryQty(item.product_name, Number(item.qty || 0)), ts)
       productIds.add(item.product_id)
     }
   }

@@ -1,3 +1,4 @@
+import { inventoryQty } from '../../src/data/units'
 import { queryAll, queryOne, run, withTransaction } from '../database'
 import { generateId } from '../security/crypto'
 import { AppError, requireAuth, requirePermission } from '../security/session'
@@ -401,9 +402,14 @@ export function createPurchase(input: {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [generateId(), user.companyId, id, item.productId, item.productName, item.qty, item.rate, item.taxRate || 0, item.amount],
       )
+      const stockQty = inventoryQty(item.productName, item.qty)
+      const pieceRate =
+        stockQty > 0 && Math.abs(stockQty - item.qty) > 0.0001
+          ? Math.round(((item.qty * item.rate) / stockQty) * 100) / 100
+          : item.rate
       run('UPDATE products SET current_stock = current_stock + ?, purchase_rate = ?, updated_at = ? WHERE id = ? AND company_id = ?', [
-        item.qty,
-        item.rate,
+        stockQty,
+        pieceRate,
         ts,
         item.productId,
         user.companyId,
@@ -411,7 +417,7 @@ export function createPurchase(input: {
       run(
         `INSERT INTO stock_movements (id, company_id, product_id, movement_type, qty, reference_type, reference_id, created_by, created_at)
          VALUES (?, ?, ?, 'purchase', ?, 'purchase', ?, ?, ?)`,
-        [generateId(), user.companyId, item.productId, item.qty, id, user.id, ts],
+        [generateId(), user.companyId, item.productId, stockQty, id, user.id, ts],
       )
     }
     writeAudit(user.companyId, user, 'purchase.created', 'purchases', id, `Purchase from ${input.supplierName}`)
